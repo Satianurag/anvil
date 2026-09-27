@@ -70,4 +70,4 @@ GoPlausible advertises Algorand networks with the full genesis hash (`algorand:w
 
 ## Production
 
-Set `ALGORAND_NETWORK=mainnet`, `PAY_TO` (opted in to USDC ASA 31566704), `PUBLIC_URL`, `RECEIPT_MNEMONIC` (hot wallet with a few ALGO for anchor fees), S3/R2, Gemini key, plus the sandbox setup above on the host. `FACILITATOR_URL` defaults to `https://facilitator.goplausible.xyz`.
+Set `ALGORAND_NETWORK=mainnet`, `PAY_TO` (opted in to USDC ASA 31566704), `PUBLIC_URL`, `RECEIPT_MNEMONIC` (hot wallet with a few ALGO for anchor fees), S3/R2 (`STORAGE_CAP_BYTES` caps total bucket size; new jobs get an unpaid 503 near the cap), Gemini key, plus the sandbox setup above on the host. `FACILITATOR_URL` defaults to `https://facilitator.goplausible.xyz`.

@@ -3,7 +3,7 @@ import { config } from "../config.ts";
 import { anchorReceipt, lookupTransaction, NOTE_PREFIX, type ReceiptNote } from "./chain.ts";
 import { type JobDefinition, JobInputError } from "./job.ts";
 import { assertPublicUrl } from "./ssrf.ts";
-import { getJson, getObject, listKeys, putJson, putObject, sha256, signedUrl } from "./storage.ts";
+import { assertCapacity, getJson, getObject, listKeys, putJson, putObject, sha256, signedUrl } from "./storage.ts";
 
 interface Receipt {
   job_id: string;
@@ -26,7 +26,7 @@ const urlsIn = (v: unknown): string[] =>
 export async function precheck(job: JobDefinition, raw: unknown) {
   const parsed = job.input.safeParse(raw);
   if (!parsed.success) throw new JobInputError("invalid input", parsed.error.issues);
-  await Promise.all(urlsIn(parsed.data).map(assertPublicUrl));
+  await Promise.all([...urlsIn(parsed.data).map(assertPublicUrl), assertCapacity()]);
   return parsed.data;
 }
 

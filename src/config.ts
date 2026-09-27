@@ -32,6 +32,7 @@ const env = z
     S3_BUCKET: z.string().default("anvil"),
     S3_ACCESS_KEY_ID: z.string().optional(),
     S3_SECRET_ACCESS_KEY: z.string().optional(),
+    STORAGE_CAP_BYTES: z.coerce.number().positive().optional(),
     ARTIFACT_URL_TTL_SECONDS: z.coerce.number().default(7 * 24 * 3600),
     GEMINI_API_KEY: z.string().optional(),
     GEMINI_MODEL: z.string().default("gemini-3.1-flash-lite"),

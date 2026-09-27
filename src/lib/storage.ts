@@ -17,10 +17,41 @@ function s3(): S3Client {
   return client;
 }
 
+/** Thrown when the bucket is at STORAGE_CAP_BYTES; mapped to HTTP 503 before payment. */
+export class StorageFullError extends Error {}
+
+const HEADROOM = 50_000_000;
+let used: { bytes: number; at: number } | undefined;
+
+async function usedBytes() {
+  if (!used || Date.now() - used.at > 300_000) {
+    let bytes = 0;
+    let token: string | undefined;
+    do {
+      const res = await s3().send(new ListObjectsV2Command({ Bucket: config.S3_BUCKET, ContinuationToken: token }));
+      for (const o of res.Contents ?? []) bytes += o.Size ?? 0;
+      token = res.NextContinuationToken;
+    } while (token);
+    used = { bytes, at: Date.now() };
+  }
+  return used;
+}
+
+/** Refuses new jobs once usage is within HEADROOM of the cap, so paid jobs don't fail mid-write. */
+export async function assertCapacity() {
+  const cap = config.STORAGE_CAP_BYTES;
+  if (cap && (await usedBytes()).bytes > cap - HEADROOM) throw new StorageFullError("artifact storage is full");
+}
+
 export const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
 
 export async function putObject(key: string, body: Uint8Array | string, contentType: string) {
+  const size = typeof body === "string" ? Buffer.byteLength(body) : body.byteLength;
+  const cap = config.STORAGE_CAP_BYTES;
+  const usage = cap ? await usedBytes() : undefined;
+  if (cap && usage && usage.bytes + size > cap) throw new StorageFullError("artifact storage is full");
   await s3().send(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: body, ContentType: contentType }));
+  if (usage) usage.bytes += size;
 }
 
 export async function getObject(key: string): Promise<Uint8Array | undefined> {
