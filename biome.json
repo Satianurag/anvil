@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": { "includes": ["**", "!node_modules", "!pnpm-lock.yaml"] },
+  "formatter": { "indentStyle": "space", "lineWidth": 120 },
+  "linter": { "rules": { "preset": "recommended" } }
+}

@@ -1,0 +1,56 @@
+{
+  "name": "anvil",
+  "version": "1.0.0",
+  "description": "Pay-per-job execution and artifact service for AI agents, paid via x402 on Algorand",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env.local --watch --import tsx src/server.ts",
+    "start": "node --env-file-if-exists=.env --import tsx src/server.ts",
+    "typecheck": "tsc -p .",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run",
+    "e2e:localnet": "node --env-file-if-exists=.env.local --import tsx scripts/e2e-localnet.mts"
+  },
+  "license": "Apache-2.0",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.6.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.6.0",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1141.0",
+    "@aws-sdk/s3-request-presigner": "3.1141.0",
+    "@e2b/code-interpreter": "2.8.0",
+    "@google/genai": "2.24.0",
+    "@hono/node-server": "2.1.1",
+    "@x402/avm": "2.27.0",
+    "@x402/core": "2.27.0",
+    "@x402/extensions": "2.27.0",
+    "@x402/hono": "2.27.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "^3.0.1",
+    "algosdk": "3.8.0",
+    "defuddle": "0.19.4",
+    "hono": "4.13.9",
+    "linkedom": "^0.18.13",
+    "playwright-core": "1.63.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@algorandfoundation/algokit-utils": "9.2.2",
+    "@biomejs/biome": "^2.5.14",
+    "@types/node": "^24.19.0",
+    "@x402/fetch": "2.27.0",
+    "tsx": "^4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "^5.0.2"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  }
+}

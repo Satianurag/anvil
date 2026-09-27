@@ -1,0 +1,25 @@
+services:
+  browser:
+    image: mcr.microsoft.com/playwright:v1.63.0-noble
+    command: ["npx", "-y", "playwright@1.63.0", "run-server", "--port", "3000", "--host", "0.0.0.0"]
+    init: true
+    ipc: host
+    user: pwuser
+    ports: ["127.0.0.1:3001:3000"]
+    restart: unless-stopped
+  docling:
+    image: ghcr.io/docling-project/docling-serve-cpu:v1.35.0
+    ports: ["127.0.0.1:5001:5001"]
+    restart: unless-stopped
+  # Local S3-compatible store for development; use Cloudflare R2 in production.
+  s3:
+    image: versity/versitygw:latest
+    command: ["posix", "/data"]
+    environment:
+      ROOT_ACCESS_KEY: anvil
+      ROOT_SECRET_KEY: anvil-secret
+    volumes: ["s3data:/data"]
+    ports: ["127.0.0.1:7070:7070"]
+    profiles: ["dev"]
+volumes:
+  s3data:
