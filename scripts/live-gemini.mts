@@ -6,12 +6,10 @@ import assert from "node:assert/strict";
 
 // biome-ignore lint/suspicious/noExplicitAny: loose JSON assertions in a live script
 type Json = any;
+const live = await import("./live-client.mts");
+const post = async (path: string, body: unknown) => (await live.post(path, body)).result as Json;
 
-delete process.env.PAY_TO;
-const { createAnvil } = await import("../src/anvil.ts");
-const { sha256 } = await import("../src/lib/storage.ts");
 const { htmlToPdf, BASE_CSS } = await import("../src/lib/pdf.ts");
-const app = await createAnvil();
 
 const pdfFile = async (filename: string, body: string) => ({
   file: {
@@ -24,23 +22,6 @@ const pdfFile = async (filename: string, body: string) => ({
     ).toString("base64"),
   },
 });
-
-const post = async (path: string, body: unknown) => {
-  const t = Date.now();
-  const res = await app.request(path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json()) as Json;
-  assert.equal(res.status, 200, `${path}: ${JSON.stringify(json).slice(0, 800)}`);
-  for (const a of json.artifacts) {
-    const bytes = new Uint8Array(await (await fetch(a.url)).arrayBuffer());
-    assert.equal(sha256(bytes), a.sha256, `${path} ${a.name} hash`);
-  }
-  console.log(`OK ${path} ${Date.now() - t}ms`, json.artifacts.map((a: { name: string }) => a.name).join(" "));
-  return json.result as Json;
-};
 
 const invoice = await pdfFile(
   "invoice.pdf",

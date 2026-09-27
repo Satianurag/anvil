@@ -58,6 +58,8 @@ pnpm smoke         # unpaid run of every key-free route against the compose side
 pnpm live:sandbox  # real run of /v1/run, /v1/analyze, /v1/test in Vercel Sandbox microVMs
 pnpm live:gemini   # real Gemini run of /v1/extract*, /v1/compare, /v1/research/brief (needs GEMINI_API_KEY)
 pnpm e2e:localnet   # full paid flow on AlgoKit LocalNet (`algokit localnet start`)
+pnpm testnet:setup  # Testnet: top up payTo/receipt accounts from the payer, USDC opt-ins (.env.testnet)
+pnpm live:testnet   # every route paid for real through GoPlausible on Testnet, receipts verified
 ```
 
 `e2e:localnet` creates a local USDC-like ASA, runs an in-process x402 facilitator, and asserts: 402 challenge (price, tag, Bazaar), no charge on invalid input, paid 200 with artifacts, `payTo` balance +0.35 USDC, a verified on-chain receipt, and a paid MCP tool call (`attest`, +0.10 USDC) with its own verified receipt.

@@ -13,7 +13,9 @@
     "live:gemini": "node --env-file-if-exists=.env.local --import tsx scripts/live-gemini.mts",
     "sandbox:snapshot": "node --env-file-if-exists=.env.local --import tsx scripts/sandbox-snapshot.mts",
     "live:sandbox": "node --env-file-if-exists=.env.local --import tsx scripts/live-sandbox.mts",
-    "e2e:localnet": "node --env-file-if-exists=.env.local --import tsx scripts/e2e-localnet.mts"
+    "e2e:localnet": "node --env-file-if-exists=.env.local --import tsx scripts/e2e-localnet.mts",
+    "testnet:setup": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.testnet --import tsx scripts/testnet-setup.mts",
+    "live:testnet": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.testnet --import tsx scripts/smoke-local.mts && node --env-file-if-exists=.env.local --env-file-if-exists=.env.testnet --import tsx scripts/live-gemini.mts && node --env-file-if-exists=.env.local --env-file-if-exists=.env.testnet --import tsx scripts/live-sandbox.mts"
   },
   "license": "Apache-2.0",
   "devEngines": {

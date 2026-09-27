@@ -1,5 +1,5 @@
 /**
- * Unpaid local smoke test of every job that needs no third-party API key, plus hash lookup and MCP.
+ * Local smoke test (paid when LIVE_PAYER_MNEMONIC is set, see live-client.mts) of every job that needs no third-party API key, plus hash lookup and MCP.
  * Requires: `docker compose --profile dev up -d` (browser, docling, gotenberg, s3).
  */
 import assert from "node:assert/strict";
@@ -7,32 +7,11 @@ import algosdk from "algosdk";
 
 // biome-ignore lint/suspicious/noExplicitAny: loose JSON assertions in a smoke script
 type Json = any;
-
-delete process.env.PAY_TO;
 process.env.RECEIPT_MNEMONIC ||= algosdk.secretKeyToMnemonic(algosdk.generateAccount().sk);
-const { createAnvil } = await import("../src/anvil.ts");
+const { app, post } = await import("./live-client.mts");
+
 const { sha256 } = await import("../src/lib/storage.ts");
 const { runCheck, monitorStatus } = await import("../src/routes/monitor.ts");
-const app = await createAnvil();
-
-const post = async (path: string, body: unknown) => {
-  const res = await app.request(path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json()) as Json;
-  assert.equal(res.status, 200, `${path}: ${JSON.stringify(json).slice(0, 800)}`);
-  for (const a of json.artifacts) {
-    const bytes = new Uint8Array(await (await fetch(a.url)).arrayBuffer());
-    assert.equal(sha256(bytes), a.sha256, `${path} ${a.name} hash`);
-  }
-  console.log(
-    `OK ${path}`,
-    json.artifacts.map((a: { name: string; bytes: number }) => `${a.name}:${a.bytes}`).join(" "),
-  );
-  return json;
-};
 
 const att = await post("/v1/attest", { content: "hello anvil", label: "smoke" });
 assert.equal(att.result.sha256, sha256("hello anvil"));
