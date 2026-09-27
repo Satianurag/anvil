@@ -9,10 +9,12 @@ const creds = {
 const sbx = await Sandbox.create({
   ...creds,
   image: "vercel/sandbox/universal",
+  persistent: false,
   resources: { vcpus: 4 },
   timeout: 30 * 60_000,
 });
 const steps = [
+  "sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential pkg-config libssl-dev && sudo rm -rf /var/lib/apt/lists/*",
   "sudo mkdir -p /work && sudo chown $(id -u):$(id -g) /work",
   "python3 -m pip install --user --break-system-packages -q pandas numpy scipy matplotlib seaborn pyarrow openpyxl xlrd pytest",
   "curl -fsSL https://go.dev/dl/$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -1).linux-amd64.tar.gz | sudo tar -C /usr/local -xz && sudo ln -sf /usr/local/go/bin/go /usr/local/go/bin/gofmt /usr/local/bin/",

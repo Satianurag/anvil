@@ -32,7 +32,7 @@ export type CommandResult = { stdout: string; stderr: string; exitCode: number; 
 export class Sandbox {
   constructor(readonly sbx: VercelSandbox) {}
 
-  /** Runs a shell command; a nonzero exit is returned, not thrown. Timed-out commands exit 137. */
+  /** Runs a shell command; a nonzero exit is returned, not thrown. Timed-out commands exit 124 or 137. */
   async exec(command: string, opts: { cwd?: string; timeoutMs: number }): Promise<CommandResult> {
     const secs = Math.ceil(opts.timeoutMs / 1000);
     const r = await this.sbx.runCommand({
@@ -41,7 +41,7 @@ export class Sandbox {
       cwd: opts.cwd ?? "/work",
     });
     const [stdout, stderr] = await Promise.all([r.stdout(), r.stderr()]);
-    return { stdout, stderr, exitCode: r.exitCode, timedOut: r.exitCode === 137 };
+    return { stdout, stderr, exitCode: r.exitCode, timedOut: r.exitCode === 124 || r.exitCode === 137 };
   }
 
   async write(path: string, data: Uint8Array | string) {
@@ -77,6 +77,7 @@ export async function withSandbox<T>(
     resources: { vcpus: 2 },
     timeout: opts.timeoutMs + 60_000,
     networkPolicy: opts.network ? REGISTRIES : "deny-all",
+    persistent: false,
     tags: { app: "anvil" },
     signal,
   });
