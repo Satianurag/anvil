@@ -1,8 +1,5 @@
-import { Defuddle } from "defuddle/node";
-import { parseHTML } from "linkedom";
-import { chromium } from "playwright-core";
 import { z } from "zod";
-import { config } from "../config.ts";
+import { htmlToMarkdown, withPage } from "../lib/browser.ts";
 import { defineJob } from "../lib/job.ts";
 import { assertPublicUrl } from "../lib/ssrf.ts";
 import { sha256 } from "../lib/storage.ts";
@@ -33,19 +30,7 @@ export const evidence = defineJob({
   timeoutMs: 90_000,
   async run(input, signal) {
     await assertPublicUrl(input.url);
-    const browser = await chromium.connect(config.BROWSER_WS_URL, { timeout: 15_000 });
-    signal.addEventListener("abort", () => void browser.close());
-    try {
-      const context = await browser.newContext({ viewport: input.viewport, serviceWorkers: "block" });
-      await context.route("**/*", async (route) => {
-        try {
-          await assertPublicUrl(route.request().url());
-          await route.continue();
-        } catch {
-          await route.abort("blockedbyclient");
-        }
-      });
-      const page = await context.newPage();
+    return withPage({ viewport: input.viewport, signal }, async (page, context) => {
       const response = await page.goto(input.url, { waitUntil: input.wait_until, timeout: 45_000 });
       const capturedAt = new Date().toISOString();
       const [screenshot, pdf, html, security, server] = await Promise.all([
@@ -57,9 +42,7 @@ export const evidence = defineJob({
       ]);
       const cdp = await context.newCDPSession(page);
       const { data: mhtml } = (await cdp.send("Page.captureSnapshot", { format: "mhtml" })) as { data: string };
-      const { document } = parseHTML(html);
-      const parsed = await Defuddle(document as unknown as Document, page.url(), { markdown: true });
-      const markdown = parsed.contentMarkdown ?? parsed.content;
+      const { markdown } = await htmlToMarkdown(html, page.url());
       const artifacts = [
         { name: "screenshot.png", contentType: "image/png", body: new Uint8Array(screenshot) },
         { name: "page.pdf", contentType: "application/pdf", body: new Uint8Array(pdf) },
@@ -89,8 +72,6 @@ export const evidence = defineJob({
         },
         artifacts,
       };
-    } finally {
-      await browser.close();
-    }
+    });
   },
 });

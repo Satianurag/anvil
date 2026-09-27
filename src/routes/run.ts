@@ -1,7 +1,6 @@
-import { Sandbox } from "@e2b/code-interpreter";
 import { z } from "zod";
-import { requireEnv } from "../config.ts";
 import { type Artifact, defineJob } from "../lib/job.ts";
+import { withSandbox } from "../lib/sandbox.ts";
 
 export const run = defineJob({
   path: "/v1/run",
@@ -35,12 +34,7 @@ export const run = defineJob({
   },
   timeoutMs: 150_000,
   async run(input, signal) {
-    const sbx = await Sandbox.create({
-      apiKey: requireEnv("E2B_API_KEY"),
-      timeoutMs: (input.timeout_seconds + 30) * 1000,
-    });
-    signal.addEventListener("abort", () => void sbx.kill());
-    try {
+    return withSandbox((input.timeout_seconds + 30) * 1000, signal, async (sbx) => {
       for (const f of input.files) await sbx.files.write(f.path, f.content);
       const execution = await sbx.runCode(input.code, {
         language: input.language,
@@ -71,8 +65,6 @@ export const run = defineJob({
         },
         artifacts,
       };
-    } finally {
-      await sbx.kill();
-    }
+    });
   },
 });

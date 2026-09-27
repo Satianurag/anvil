@@ -37,10 +37,13 @@ const env = z
     GEMINI_MODEL: z.string().default("gemini-3.1-flash-lite"),
     E2B_API_KEY: z.string().optional(),
     DOCLING_URL: z.url().default("http://localhost:5001"),
+    GOTENBERG_URL: z.url().default("http://localhost:3002"),
+    PAGESPEED_API_KEY: z.string().optional(),
+    MONITOR_TICK_SECONDS: z.coerce.number().default(60),
     BROWSER_WS_URL: z.url().default("ws://localhost:3001/"),
     ALLOW_PRIVATE_TARGETS: z.stringbool().default(false),
   })
-  .parse(process.env);
+  .parse(Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== "")));
 
 const net = NETWORKS[env.ALGORAND_NETWORK];
 

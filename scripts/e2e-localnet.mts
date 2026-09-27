@@ -6,6 +6,8 @@
 import assert from "node:assert/strict";
 import { AlgorandClient, algo } from "@algorandfoundation/algokit-utils";
 import { serve } from "@hono/node-server";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { ALGORAND_TESTNET_CAIP2, toClientAvmSigner, toFacilitatorAvmSigner } from "@x402/avm";
 import { ExactAvmScheme as AvmClient } from "@x402/avm/exact/client";
 import { ExactAvmScheme as AvmFacilitator } from "@x402/avm/exact/facilitator";
@@ -13,6 +15,7 @@ import { x402Facilitator } from "@x402/core/facilitator";
 import { decodePaymentRequiredHeader, decodePaymentResponseHeader } from "@x402/core/http";
 import type { FacilitatorClient } from "@x402/core/server";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
+import { wrapMCPClientWithPayment } from "@x402/mcp";
 import algosdk from "algosdk";
 
 const ALGOD = "http://localhost:4001";
@@ -51,16 +54,14 @@ Object.assign(process.env, {
   RECEIPT_MNEMONIC: algosdk.secretKeyToMnemonic(receipts.sk),
   PUBLIC_URL: "http://localhost:4031",
 });
-const { createApp } = await import("../src/app.ts");
+const { createAnvil } = await import("../src/anvil.ts");
 const { createResourceServer } = await import("../src/x402.ts");
-const { jobs } = await import("../src/routes/index.ts");
 
 const facilitator = new x402Facilitator().register(
   [NETWORK, ALGORAND_TESTNET_CAIP2],
   new AvmFacilitator(toFacilitatorAvmSigner(b64(feePayer), { testnetUrl: ALGOD, algodToken: TOKEN })),
 );
-const app = createApp(
-  jobs,
+const app = await createAnvil(
   createResourceServer({
     verify: facilitator.verify.bind(facilitator),
     settle: facilitator.settle.bind(facilitator),
@@ -132,6 +133,32 @@ try {
   }
   assert.ok(verify?.verified, `verify failed: ${JSON.stringify(verify)}`);
   console.log("verify OK", JSON.stringify(verify));
+
+  // 4. Paid MCP tool call over Streamable HTTP -> same payTo, settled, receipt recorded
+  const mcp = wrapMCPClientWithPayment(
+    // @x402/mcp resolves its own SDK copy (zod 3 peer); the Client is protocol-compatible.
+    new Client({ name: "e2e", version: "1.0.0" }) as unknown as Parameters<typeof wrapMCPClientWithPayment>[0],
+    client,
+  );
+  await mcp.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
+  const beforeMcp = await usdc(payTo);
+  const tool = await mcp.callTool("attest", { content: "mcp e2e" });
+  assert.ok(!tool.isError, JSON.stringify(tool.content));
+  assert.ok(tool.paymentMade && tool.paymentResponse?.success, "mcp payment settled");
+  assert.equal((await usdc(payTo)) - beforeMcp, 100_000n);
+  const mcpOut = JSON.parse((tool.content[0] as unknown as { text: string }).text) as {
+    receipt: { payment_txid: string };
+  };
+  assert.equal(mcpOut.receipt.payment_txid, tool.paymentResponse?.transaction);
+  let mcpVerify: { verified: boolean } | undefined;
+  for (let i = 0; i < 20 && !mcpVerify?.verified; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const res = await fetch(`${base}/v1/verify/${mcpOut.receipt.payment_txid}`);
+    if (res.ok) mcpVerify = (await res.json()) as typeof mcpVerify;
+  }
+  assert.ok(mcpVerify?.verified, "mcp receipt verified");
+  console.log("MCP paid call OK", tool.paymentResponse?.transaction);
+  await mcp.close();
   console.log("E2E PASSED");
 } finally {
   server.close();

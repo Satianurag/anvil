@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { config, requireEnv } from "../config.ts";
 
@@ -38,3 +38,24 @@ export function signedUrl(key: string) {
     expiresIn: config.ARTIFACT_URL_TTL_SECONDS,
   });
 }
+
+export async function listKeys(prefix: string): Promise<string[]> {
+  const keys: string[] = [];
+  let token: string | undefined;
+  do {
+    const res = await s3().send(
+      new ListObjectsV2Command({ Bucket: config.S3_BUCKET, Prefix: prefix, ContinuationToken: token }),
+    );
+    for (const o of res.Contents ?? []) if (o.Key) keys.push(o.Key);
+    token = res.NextContinuationToken;
+  } while (token);
+  return keys;
+}
+
+export async function getJson<T>(key: string): Promise<T | undefined> {
+  const bytes = await getObject(key);
+  return bytes && (JSON.parse(new TextDecoder().decode(bytes)) as T);
+}
+
+export const putJson = (key: string, value: unknown) =>
+  putObject(key, JSON.stringify(value, null, 2), "application/json");

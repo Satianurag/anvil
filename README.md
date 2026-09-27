@@ -6,16 +6,31 @@ Every paid call does real work and returns content-addressed artifacts. After se
 
 | Route | Price | What it does |
 | --- | --- | --- |
-| `POST /v1/evidence` | $0.35 | Loads a public URL in a real browser; returns full-page PNG, PDF, MHTML, DOM and clean Markdown plus HTTP/TLS metadata, all hashed |
-| `POST /v1/extract` | $0.10 | Document (URL or base64, ≤5 pages) → JSON matching your JSON Schema, with verbatim evidence quotes checked against the source |
-| `POST /v1/run` | $0.05 | Runs Python/JavaScript in a fresh E2B sandbox; returns stdout/stderr/results and generated charts |
+| `POST /v1/evidence` | $0.35 | Notarized web evidence capture: loads a public URL in a real browser and returns a full-page screenshot, PDF, MHTML archive, DOM snapshot and clean markdown, all SHA-256 hashed and bound on Algorand to the payment. |
+| `POST /v1/extract` | $0.10 | Schema-faithful document extraction: converts a PDF, DOCX, XLSX, PPTX, HTML or image (first 5 pages, OCR included) and returns JSON that validates against your JSON Schema, with a verbatim source quote for every extracted field. |
+| `POST /v1/extract/invoice` | $0.10 | Invoice / receipt to accounting-ready JSON (vendor, customer, dates, line items, tax, totals, bank details) with verbatim evidence per field and arithmetic checks (line items vs subtotal, subtotal + tax vs total). |
+| `POST /v1/extract/bank-statement` | $0.35 | Bank statement to categorised transaction ledger (signed amounts, running balances, categories) with a reconciliation check: opening balance + sum(transactions) must equal closing balance. |
+| `POST /v1/extract/resume-match` | $0.25 | Resume vs job description screening: scores the candidate requirement-by-requirement (met / partial / not met) with verbatim resume quotes checked against the source, plus strengths, gaps and interview questions. |
+| `POST /v1/compare` | $0.25 | Semantic document comparison (contracts, policies, terms, specs): converts two versions and returns a list of material changes (added / removed / modified) with verbatim before/after quotes verified against each version and a risk-oriented significance rating. |
+| `POST /v1/run` | $0.05 | Isolated code execution: runs Python or JavaScript in a fresh Firecracker microVM (no state shared between calls) and returns stdout, stderr, errors and any produced charts/files as hashed artifacts. |
+| `POST /v1/analyze` | $0.10 | Data analysis as a call: send a CSV/TSV/JSON/Parquet/Excel dataset and a question; Gemini writes pandas/matplotlib code, it runs in a fresh E2B microVM (with one self-repair attempt), and you get the answer, the exact code, charts and transformed files as hashed artifacts. |
+| `POST /v1/test` | $0.25 | CI-as-a-call: clones a public git repository at an exact commit/branch/tag inside a fresh E2B microVM, installs dependencies, runs its test suite (auto-detected for Node, Python, Go, Rust or your command) and returns pass/fail, the resolved commit SHA, JUnit XML and full logs as hashed evidence. |
+| `POST /v1/audit/site` | $0.50 | Website audit report: Lighthouse performance/accessibility/best-practices/SEO scores, axe-core WCAG 2.2 AA violations with offending selectors, on-page SEO checks (title, meta, headings, alt text, canonical, robots, sitemap) and a full-page screenshot, delivered as a PDF report plus JSON. |
+| `POST /v1/research/brief` | $0.75 | Cited research brief / due-diligence dossier: Gemini with live Google Search grounding writes a structured brief where every claim carries numbered citations; each cited source page is snapshotted and SHA-256 hashed so the evidence survives link rot. |
+| `POST /v1/browse/act` | $0.25 | Scripted browser session: runs up to 25 steps (goto, click, fill, select, press, wait_for, scroll, extract, screenshot) in a real Chromium on public sites and returns extracted values, per-step results, screenshots and a Playwright trace as hashed evidence. |
+| `POST /v1/monitor` | $0.50 | Evidence-grade change monitoring: watches a public page (or one CSS selector) for up to 24 checks at your interval; every change is captured (screenshot + text), diffed, SHA-256 hashed, anchored on Algorand and pushed to your webhook with an Ed25519 signature. |
+| `POST /v1/certify` | $0.25 | Issues a verifiable certificate PDF (completion, membership, authenticity, award): rendered, SHA-256 hashed, Ed25519-signed by Anvil's Algorand receipt key and anchored on-chain; anyone can verify the PDF hash via GET /v1/verify/hash/{sha256}. |
+| `POST /v1/attest` | $0.10 | Timestamped proof-of-existence: binds a SHA-256 (or content you send) plus a label and metadata to an Algorand transaction. |
 | `GET /v1/verify/:txid` | free | Recomputes the manifest hash and checks the on-chain anchor |
+| `GET /v1/verify/hash/:sha256` | free | Finds every Anvil job (attestation, certificate, artifact) that recorded this SHA-256 |
+| `GET /v1/monitor/:id` | free | Monitor status, change history and evidence links |
+| `POST /mcp` | per tool | MCP Streamable HTTP endpoint exposing every paid route as a tool, paid with x402 (`@x402/mcp`) under the same `payTo` |
 
 Each paid route advertises Bazaar discovery metadata and `extra.tag = "x402-global-challenge"`, all under one `payTo`.
 
 ## Stack
 
-Hono + `@x402/hono` / `@x402/avm` / `@x402/extensions` 2.27, Playwright (remote browser), docling-serve, Gemini structured output + AJV, E2B, any S3-compatible store (Cloudflare R2 in production), algosdk.
+Hono + `@x402/hono` / `@x402/avm` / `@x402/extensions` / `@x402/mcp` 2.27, MCP TypeScript SDK, Playwright (remote browser) + axe-core, Google PageSpeed Insights, docling-serve, Gotenberg, Gemini structured output + AJV, E2B, any S3-compatible store (Cloudflare R2 in production), algosdk.
 
 ## Run locally
 
@@ -23,21 +38,27 @@ Requires Node 24, pnpm 12, Docker.
 
 ```sh
 pnpm install
-docker compose --profile dev up -d          # browser, docling-serve, local S3 (versitygw)
+docker compose --profile dev up -d          # browser, docling-serve, gotenberg, local S3 (versitygw)
 cp .env.example .env.local                   # fill in what you have
 pnpm dev
 ```
 
-Without `PAY_TO` the routes run unpaid (development only). Integrations are optional until used: `/v1/extract` needs `GEMINI_API_KEY`, `/v1/run` needs `E2B_API_KEY`; calling them without one returns a clear error.
+Without `PAY_TO` the routes run unpaid (development only). Integrations are optional until used; calling a route without its key returns a clear error:
+
+- `GEMINI_API_KEY`: `/v1/extract*`, `/v1/compare`, `/v1/research/brief`, `/v1/analyze`
+- `E2B_API_KEY`: `/v1/run`, `/v1/analyze`, `/v1/test`
+- `RECEIPT_MNEMONIC`: `/v1/certify` signatures and all on-chain anchors
+- `PAGESPEED_API_KEY` (optional): Lighthouse scores in `/v1/audit/site`; the unauthenticated quota is often exhausted, pass `"lighthouse": false` to skip
 
 ## Checks
 
 ```sh
 pnpm lint && pnpm typecheck && pnpm test
+pnpm smoke         # unpaid run of every key-free route against the compose sidecars (attest, certify, evidence, audit, browse, monitor, MCP)
 pnpm e2e:localnet   # full paid flow on AlgoKit LocalNet (`algokit localnet start`)
 ```
 
-`e2e:localnet` creates a local USDC-like ASA, runs an in-process x402 facilitator, and asserts: 402 challenge (price, tag, Bazaar), no charge on invalid input, paid 200 with artifacts, `payTo` balance +0.35 USDC, and a verified on-chain receipt.
+`e2e:localnet` creates a local USDC-like ASA, runs an in-process x402 facilitator, and asserts: 402 challenge (price, tag, Bazaar), no charge on invalid input, paid 200 with artifacts, `payTo` balance +0.35 USDC, a verified on-chain receipt, and a paid MCP tool call (`attest`, +0.10 USDC) with its own verified receipt.
 
 ## Network ids
 

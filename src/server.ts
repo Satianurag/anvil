@@ -1,8 +1,9 @@
 import { serve } from "@hono/node-server";
-import { createApp } from "./app.ts";
+import { createAnvil } from "./anvil.ts";
 import { config } from "./config.ts";
-import { jobs } from "./routes/index.ts";
+import { startMonitorScheduler } from "./routes/monitor.ts";
 import { createResourceServer } from "./x402.ts";
 
-const app = createApp(jobs, config.PAY_TO ? createResourceServer() : undefined);
+const app = await createAnvil(config.PAY_TO ? createResourceServer() : undefined);
+startMonitorScheduler();
 serve({ fetch: app.fetch, port: config.PORT }, (info) => console.log(`Anvil listening on :${info.port}`));
