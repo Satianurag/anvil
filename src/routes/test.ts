@@ -28,7 +28,7 @@ export const test = defineJob({
   path: "/v1/test",
   price: "$0.25",
   description:
-    "CI-as-a-call: clones a public git repository at an exact commit/branch/tag inside a fresh ephemeral Daytona sandbox, installs dependencies, runs its test suite (auto-detected for Node, Python, Go or Rust, or your command) and returns pass/fail, the resolved commit SHA, JUnit XML and full logs as hashed evidence.",
+    "CI-as-a-call: clones a public git repository (GitHub, GitLab, Bitbucket, Codeberg) at an exact commit/branch/tag inside a fresh Vercel Sandbox Firecracker microVM, installs dependencies, runs its test suite (auto-detected for Node, Python, Go or Rust, or your command) and returns pass/fail, the resolved commit SHA, JUnit XML and full logs as hashed evidence.",
   input: z.object({
     repo: z.url({ protocol: /^https$/ }).describe("Public HTTPS git URL, e.g. https://github.com/owner/repo"),
     ref: z

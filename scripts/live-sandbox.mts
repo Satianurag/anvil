@@ -1,6 +1,6 @@
 /**
- * Live run of the sandbox routes (/v1/run, /v1/analyze, /v1/test) on Daytona.
- * Requires DAYTONA_API_KEY (after `pnpm daytona:snapshot`) and GEMINI_API_KEY for analyze.
+ * Live run of the sandbox routes (/v1/run, /v1/analyze, /v1/test) on Vercel Sandbox.
+ * Requires VERCEL_* (after `pnpm sandbox:snapshot`) and GEMINI_API_KEY for analyze.
  */
 import assert from "node:assert/strict";
 

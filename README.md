@@ -12,9 +12,9 @@ Every paid call does real work and returns content-addressed artifacts. After se
 | `POST /v1/extract/bank-statement` | $0.35 | Bank statement to categorised transaction ledger (signed amounts, running balances, categories) with a reconciliation check: opening balance + sum(transactions) must equal closing balance. |
 | `POST /v1/extract/resume-match` | $0.25 | Resume vs job description screening: scores the candidate requirement-by-requirement (met / partial / not met) with verbatim resume quotes checked against the source, plus strengths, gaps and interview questions. |
 | `POST /v1/compare` | $0.25 | Semantic document comparison (contracts, policies, terms, specs): converts two versions and returns a list of material changes (added / removed / modified) with verbatim before/after quotes verified against each version and a risk-oriented significance rating. |
-| `POST /v1/run` | $0.05 | Isolated code execution: runs Python (pandas, numpy, scipy, matplotlib preinstalled) or JavaScript (Node 24) in a fresh ephemeral Daytona sandbox with no network and no state shared between calls, and returns stdout, stderr, exit code and every file written to ./output (charts, CSVs) as hashed artifacts. |
-| `POST /v1/analyze` | $0.10 | Data analysis as a call: send a CSV/TSV/JSON/Parquet/Excel dataset and a question; Gemini writes pandas/matplotlib code, it runs in a fresh ephemeral Daytona sandbox with no network (with one self-repair attempt), and you get the answer, the exact code, charts and transformed files as hashed artifacts. |
-| `POST /v1/test` | $0.25 | CI-as-a-call: clones a public git repository at an exact commit/branch/tag inside a fresh ephemeral Daytona sandbox, installs dependencies, runs its test suite (auto-detected for Node, Python, Go or Rust, or your command) and returns pass/fail, the resolved commit SHA, JUnit XML and full logs as hashed evidence. |
+| `POST /v1/run` | $0.05 | Isolated code execution: runs Python (pandas, numpy, scipy, matplotlib preinstalled) or JavaScript (Node 24) in a fresh Vercel Sandbox Firecracker microVM with no network and no state shared between calls, and returns stdout, stderr, exit code and every file written to ./output (charts, CSVs) as hashed artifacts. |
+| `POST /v1/analyze` | $0.10 | Data analysis as a call: send a CSV/TSV/JSON/Parquet/Excel dataset and a question; Gemini writes pandas/matplotlib code, it runs in a fresh Vercel Sandbox Firecracker microVM with no network (with one self-repair attempt), and you get the answer, the exact code, charts and transformed files as hashed artifacts. |
+| `POST /v1/test` | $0.25 | CI-as-a-call: clones a public git repository (GitHub, GitLab, Bitbucket, Codeberg) at an exact commit/branch/tag inside a fresh Vercel Sandbox Firecracker microVM, installs dependencies, runs its test suite (auto-detected for Node, Python, Go or Rust, or your command) and returns pass/fail, the resolved commit SHA, JUnit XML and full logs as hashed evidence. |
 | `POST /v1/audit/site` | $0.50 | Website audit report: Lighthouse performance/accessibility/best-practices/SEO scores, axe-core WCAG 2.2 AA violations with offending selectors, on-page SEO checks (title, meta, headings, alt text, canonical, robots, sitemap) and a full-page screenshot, delivered as a PDF report plus JSON. |
 | `POST /v1/research/brief` | $0.75 | Cited research brief / due-diligence dossier: Gemini with live Google Search grounding writes a structured brief where every claim carries numbered citations; each cited source page is snapshotted and SHA-256 hashed so the evidence survives link rot. |
 | `POST /v1/browse/act` | $0.25 | Scripted browser session: runs up to 25 steps (goto, click, fill, select, press, wait_for, scroll, extract, screenshot) in a real Chromium on public sites and returns extracted values, per-step results, screenshots and a Playwright trace as hashed evidence. |
@@ -30,7 +30,7 @@ Each paid route advertises Bazaar discovery metadata and `extra.tag = "x402-glob
 
 ## Stack
 
-Hono + `@x402/hono` / `@x402/avm` / `@x402/extensions` / `@x402/mcp` 2.27, MCP TypeScript SDK, Playwright (remote browser) + axe-core, Google PageSpeed Insights, docling-serve, Gotenberg, Gemini structured output + AJV, Daytona sandboxes, any S3-compatible store (Cloudflare R2 in production), algosdk.
+Hono + `@x402/hono` / `@x402/avm` / `@x402/extensions` / `@x402/mcp` 2.27, MCP TypeScript SDK, Playwright (remote browser) + axe-core, Google PageSpeed Insights, docling-serve, Gotenberg, Gemini structured output + AJV, Vercel Sandbox microVMs, any S3-compatible store (Cloudflare R2 in production), algosdk.
 
 ## Run locally
 
@@ -46,7 +46,7 @@ pnpm dev
 Without `PAY_TO` the routes run unpaid (development only). Integrations are optional until used; calling a route without its key returns a clear error:
 
 - `GEMINI_API_KEY`: `/v1/extract*`, `/v1/compare`, `/v1/research/brief`, `/v1/analyze`. `GEMINI_MODEL` / `GEMINI_SEARCH_MODEL` take comma-separated fallbacks used on 429/5xx; free-tier keys only get Search grounding on 2.5 models
-- `DAYTONA_API_KEY`: `/v1/run`, `/v1/analyze`, `/v1/test` run in ephemeral [Daytona](https://daytona.io) sandboxes (free tier: $200 credit, no card). Run `pnpm daytona:snapshot` once to build the `anvil-sandbox` snapshot (Python data stack, Node 24, Go, Rust)
+- `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`, `VERCEL_SANDBOX_SNAPSHOT`: `/v1/run`, `/v1/analyze`, `/v1/test` run in [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) Firecracker microVMs (free Hobby plan: 5 active-CPU hours and 5,000 sandboxes a month, no card). Run `pnpm sandbox:snapshot` once to build the snapshot (Python data stack, Node 24, Go, Rust) and set the printed id
 - `RECEIPT_MNEMONIC`: `/v1/certify` signatures and all on-chain anchors
 - `PAGESPEED_API_KEY` (optional): Lighthouse scores in `/v1/audit/site`; the unauthenticated quota is often exhausted, pass `"lighthouse": false` to skip
 
@@ -55,7 +55,7 @@ Without `PAY_TO` the routes run unpaid (development only). Integrations are opti
 ```sh
 pnpm lint && pnpm typecheck && pnpm test
 pnpm smoke         # unpaid run of every key-free route against the compose sidecars (attest, certify, evidence, audit, browse, monitor, MCP)
-pnpm live:sandbox  # real run of /v1/run, /v1/analyze, /v1/test in Daytona sandboxes
+pnpm live:sandbox  # real run of /v1/run, /v1/analyze, /v1/test in Vercel Sandbox microVMs
 pnpm live:gemini   # real Gemini run of /v1/extract*, /v1/compare, /v1/research/brief (needs GEMINI_API_KEY)
 pnpm e2e:localnet   # full paid flow on AlgoKit LocalNet (`algokit localnet start`)
 ```

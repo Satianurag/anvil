@@ -6,7 +6,7 @@ export const run = defineJob({
   path: "/v1/run",
   price: "$0.05",
   description:
-    "Isolated code execution: runs Python (pandas, numpy, scipy, matplotlib preinstalled) or JavaScript (Node 24) in a fresh ephemeral Daytona sandbox with no network and no state shared between calls, and returns stdout, stderr, exit code and every file written to ./output (charts, CSVs) as hashed artifacts.",
+    "Isolated code execution: runs Python (pandas, numpy, scipy, matplotlib preinstalled) or JavaScript (Node 24) in a fresh Vercel Sandbox Firecracker microVM with no network and no state shared between calls, and returns stdout, stderr, exit code and every file written to ./output (charts, CSVs) as hashed artifacts.",
   input: z.object({
     language: z.enum(["python", "javascript"]).default("python"),
     code: z.string().min(1).max(100_000),
