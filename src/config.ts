@@ -35,6 +35,7 @@ const env = z
     ARTIFACT_URL_TTL_SECONDS: z.coerce.number().default(7 * 24 * 3600),
     GEMINI_API_KEY: z.string().optional(),
     GEMINI_MODEL: z.string().default("gemini-3.1-flash-lite"),
+    GEMINI_SEARCH_MODEL: z.string().default("gemini-2.5-flash"),
     E2B_API_KEY: z.string().optional(),
     DOCLING_URL: z.url().default("http://localhost:5001"),
     GOTENBERG_URL: z.url().default("http://localhost:3002"),

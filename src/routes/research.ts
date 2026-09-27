@@ -88,7 +88,7 @@ export const research = defineJob({
     }));
     const document = [
       `# ${input.topic}`,
-      `_Generated ${new Date().toISOString()} by Anvil (${config.GEMINI_MODEL}, Google Search grounding)_`,
+      `_Generated ${new Date().toISOString()} by Anvil (${config.GEMINI_SEARCH_MODEL}, Google Search grounding)_`,
       brief,
       "## Sources",
       ...sources.map(
@@ -101,7 +101,7 @@ export const research = defineJob({
       brief_markdown: brief,
       sources,
       search_queries: meta?.webSearchQueries ?? [],
-      model: config.GEMINI_MODEL,
+      model: config.GEMINI_SEARCH_MODEL,
     };
     return {
       result,

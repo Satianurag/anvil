@@ -45,7 +45,7 @@ pnpm dev
 
 Without `PAY_TO` the routes run unpaid (development only). Integrations are optional until used; calling a route without its key returns a clear error:
 
-- `GEMINI_API_KEY`: `/v1/extract*`, `/v1/compare`, `/v1/research/brief`, `/v1/analyze`
+- `GEMINI_API_KEY`: `/v1/extract*`, `/v1/compare`, `/v1/research/brief`, `/v1/analyze`. `GEMINI_MODEL` / `GEMINI_SEARCH_MODEL` take comma-separated fallbacks used on 429/5xx; free-tier keys only get Search grounding on 2.5 models
 - `E2B_API_KEY`: `/v1/run`, `/v1/analyze`, `/v1/test`
 - `RECEIPT_MNEMONIC`: `/v1/certify` signatures and all on-chain anchors
 - `PAGESPEED_API_KEY` (optional): Lighthouse scores in `/v1/audit/site`; the unauthenticated quota is often exhausted, pass `"lighthouse": false` to skip
@@ -55,6 +55,7 @@ Without `PAY_TO` the routes run unpaid (development only). Integrations are opti
 ```sh
 pnpm lint && pnpm typecheck && pnpm test
 pnpm smoke         # unpaid run of every key-free route against the compose sidecars (attest, certify, evidence, audit, browse, monitor, MCP)
+pnpm live:gemini   # real Gemini run of /v1/extract*, /v1/compare, /v1/research/brief (needs GEMINI_API_KEY)
 pnpm e2e:localnet   # full paid flow on AlgoKit LocalNet (`algokit localnet start`)
 ```
 

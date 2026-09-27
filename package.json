@@ -10,6 +10,7 @@
     "format": "biome check --write .",
     "test": "vitest run",
     "smoke": "node --env-file-if-exists=.env.local --import tsx scripts/smoke-local.mts",
+    "live:gemini": "node --env-file-if-exists=.env.local --import tsx scripts/live-gemini.mts",
     "e2e:localnet": "node --env-file-if-exists=.env.local --import tsx scripts/e2e-localnet.mts"
   },
   "license": "Apache-2.0",
