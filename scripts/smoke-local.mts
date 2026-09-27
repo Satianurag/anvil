@@ -78,7 +78,8 @@ const bad = await app.request("/v1/audit/site", {
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ url: "http://169.254.169.254/" }),
 });
-assert.equal(bad.status, 422);
+const paid = !!process.env.LIVE_PAYER_MNEMONIC;
+assert.equal(bad.status, paid ? 402 : 422);
 
 const rpc = async (method: string, params: unknown) => {
   const res = await app.request("/mcp", {
@@ -91,8 +92,10 @@ const rpc = async (method: string, params: unknown) => {
 };
 const list = await rpc("tools/list", {});
 assert.ok(list.tools.length >= 15, `tools: ${list.tools.length}`);
-const call = await rpc("tools/call", { name: "attest", arguments: { content: "via mcp" } });
-assert.equal(JSON.parse(call.content[0].text).result.sha256, sha256("via mcp"));
-console.log(`OK MCP (${list.tools.length} tools, attest call)`);
+if (!paid) {
+  const call = await rpc("tools/call", { name: "attest", arguments: { content: "via mcp" } });
+  assert.equal(JSON.parse(call.content[0].text).result.sha256, sha256("via mcp"));
+}
+console.log(`OK MCP (${list.tools.length} tools${paid ? "" : ", attest call"})`);
 console.log("SMOKE PASSED");
 process.exit(0);

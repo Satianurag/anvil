@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { toClientAvmSigner } from "@x402/avm";
 import { ExactAvmScheme } from "@x402/avm/exact/client";
-import { decodePaymentResponseHeader } from "@x402/core/http";
+import { decodePaymentRequiredHeader, decodePaymentResponseHeader } from "@x402/core/http";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
 import algosdk from "algosdk";
 
@@ -13,8 +13,9 @@ const mnemonic = process.env.LIVE_PAYER_MNEMONIC;
 if (!mnemonic) delete process.env.PAY_TO;
 const { createAnvil } = await import("../src/anvil.ts");
 const { config } = await import("../src/config.ts");
+const { createResourceServer } = await import("../src/x402.ts");
 const { sha256 } = await import("../src/lib/storage.ts");
-export const app = await createAnvil();
+export const app = await createAnvil(mnemonic ? createResourceServer() : undefined);
 
 const local = (input: RequestInfo | URL, init?: RequestInit) => Promise.resolve(app.request(input, init));
 const doFetch = mnemonic
@@ -54,7 +55,12 @@ export async function post(path: string, body: unknown): Promise<any> {
   });
   // biome-ignore lint/suspicious/noExplicitAny: loose JSON assertions in live scripts
   const json = (await res.json()) as any;
-  assert.equal(res.status, 200, `${path}: ${JSON.stringify(json).slice(0, 800)}`);
+  const why = res.headers.get("PAYMENT-REQUIRED");
+  assert.equal(
+    res.status,
+    200,
+    `${path}: ${JSON.stringify(json).slice(0, 800)} ${why ? JSON.stringify(decodePaymentRequiredHeader(why).error) : ""} ${res.headers.get("PAYMENT-RESPONSE") ? JSON.stringify(decodePaymentResponseHeader(res.headers.get("PAYMENT-RESPONSE") ?? "")) : ""}`,
+  );
   for (const a of json.artifacts) {
     const bytes = new Uint8Array(await (await fetch(a.url)).arrayBuffer());
     assert.equal(sha256(bytes), a.sha256, `${path} ${a.name} hash`);

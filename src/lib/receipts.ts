@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { config } from "../config.ts";
 import { anchorReceipt, lookupTransaction, NOTE_PREFIX, type ReceiptNote } from "./chain.ts";
 import { type JobDefinition, JobInputError } from "./job.ts";
+import { assertPublicUrl } from "./ssrf.ts";
 import { getJson, getObject, listKeys, putJson, putObject, sha256, signedUrl } from "./storage.ts";
 
 interface Receipt {
@@ -13,13 +14,25 @@ interface Receipt {
 }
 
 const pending = new Map<string, Receipt>();
+const settled = new Set<string>();
 const publicUrl = (path: string) => new URL(path, config.PUBLIC_URL).href;
+
+const urlsIn = (v: unknown): string[] =>
+  v && typeof v === "object"
+    ? Object.entries(v).flatMap(([k, x]) => (k === "url" && typeof x === "string" ? [x] : urlsIn(x)))
+    : [];
+
+/** Schema + SSRF checks that run before payment, so malformed or unsafe requests are never charged. */
+export async function precheck(job: JobDefinition, raw: unknown) {
+  const parsed = job.input.safeParse(raw);
+  if (!parsed.success) throw new JobInputError("invalid input", parsed.error.issues);
+  await Promise.all(urlsIn(parsed.data).map(assertPublicUrl));
+  return parsed.data;
+}
 
 /** Validates input, runs the job, stores + hashes artifacts and the manifest. Throws JobInputError for caller errors. */
 export async function executeJob(job: JobDefinition, raw: unknown, payTxId?: string) {
-  const parsed = job.input.safeParse(raw);
-  if (!parsed.success) throw new JobInputError("invalid input", parsed.error.issues);
-  const output = await job.run(parsed.data, AbortSignal.timeout(job.timeoutMs ?? 120_000));
+  const output = await job.run(await precheck(job, raw), AbortSignal.timeout(job.timeoutMs ?? 120_000));
   const jobId = randomUUID();
 
   const artifacts = await Promise.all(
@@ -49,8 +62,10 @@ export async function executeJob(job: JobDefinition, raw: unknown, payTxId?: str
       putJson(`index/${h}/${jobId}.json`, { job_id: jobId, route: job.path, payment_txid: payTxId }),
     ),
   );
-  if (payTxId)
+  if (payTxId) {
     pending.set(payTxId, { job_id: jobId, route: job.path, manifest_sha256: manifestSha, payment_txid: payTxId });
+    if (settled.delete(payTxId)) void recordSettlement(payTxId).catch((err) => console.error("receipt failed", err));
+  }
 
   return {
     job_id: jobId,
@@ -61,10 +76,13 @@ export async function executeJob(job: JobDefinition, raw: unknown, payTxId?: str
   };
 }
 
-/** Called after on-chain settlement: anchors the manifest hash (if a receipt key is configured) and stores the receipt. */
+/** Called on settlement (before or after the job): anchors the manifest hash (if a receipt key is configured) and stores the receipt. */
 export async function recordSettlement(payTxId: string) {
   const receipt = pending.get(payTxId);
-  if (!receipt) return;
+  if (!receipt) {
+    settled.add(payTxId);
+    return;
+  }
   pending.delete(payTxId);
   if (config.RECEIPT_MNEMONIC) {
     const note: ReceiptNote = { p: receipt.payment_txid, h: receipt.manifest_sha256, r: receipt.route };
