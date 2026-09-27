@@ -8,6 +8,7 @@ import { paymentTxId } from "./lib/chain.ts";
 import { type JobDefinition, JobInputError } from "./lib/job.ts";
 import { executeJob, lookupHash, precheck, recordSettlement, verifyReceipt } from "./lib/receipts.ts";
 import { UnsafeTargetError } from "./lib/ssrf.ts";
+import { StorageFullError } from "./lib/storage.ts";
 import { CHALLENGE_TAG, paidRoutes } from "./x402.ts";
 
 export function createApp(jobs: JobDefinition[], resourceServer?: x402ResourceServer, extra?: (app: Hono) => void) {
@@ -30,6 +31,7 @@ export function createApp(jobs: JobDefinition[], resourceServer?: x402ResourceSe
     if (err instanceof HTTPException) return err.getResponse();
     if (err instanceof JobInputError || err instanceof UnsafeTargetError)
       return c.json({ error: "invalid_input", message: err.message, issues: (err as JobInputError).details }, 422);
+    if (err instanceof StorageFullError) return c.json({ error: "storage_full", message: err.message }, 503);
     console.error(err);
     return c.json({ error: "job_failed", message: err instanceof Error ? err.message : String(err) }, 500);
   });
