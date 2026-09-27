@@ -1,9 +1,8 @@
-import { CommandExitError, type CommandResult } from "@e2b/code-interpreter";
 import { z } from "zod";
 import { type Artifact, defineJob, JobInputError } from "../lib/job.ts";
 import { withSandbox } from "../lib/sandbox.ts";
 
-const DIR = "/home/user/repo";
+const DIR = "/work/repo";
 
 /** Picks install + test commands from the repository layout when the caller does not specify them. */
 const DETECT = `set -e
@@ -12,32 +11,22 @@ if [ -f package.json ]; then
   elif [ -f yarn.lock ]; then echo "corepack enable >/dev/null 2>&1; yarn install --frozen-lockfile|||yarn test";
   else echo "npm ci || npm install|||npm test"; fi
 elif [ -f pyproject.toml ] || [ -f setup.py ] || [ -f requirements.txt ]; then
-  echo "pip install -q pytest; [ -f requirements.txt ] && pip install -q -r requirements.txt; ([ -f pyproject.toml ] || [ -f setup.py ]) && pip install -q -e . || true|||python -m pytest --junitxml=junit.xml -q"
-elif [ -f go.mod ]; then echo "go mod download|||go test ./... -v"
-elif [ -f Cargo.toml ]; then echo "cargo fetch|||cargo test"
+  echo 'pip install -q pytest; [ -f requirements.txt ] && pip install -q -r requirements.txt; if [ -f pyproject.toml ] || [ -f setup.py ]; then pip install -q -e ".[test,tests]" || pip install -q -e .; fi; for g in test tests dev; do pip install -q --group $g 2>/dev/null; done; true|||python -m pytest --junitxml=junit.xml -q'
 else echo "|||"; fi`;
 
-const exec = async (p: Promise<CommandResult>) => {
-  try {
-    return await p;
-  } catch (err) {
-    if (err instanceof CommandExitError) return err;
-    throw err;
-  }
-};
-
 function junitSummary(xml: string) {
-  const root = /<testsuites?\b[^>]*>/.exec(xml)?.[0] ?? "";
-  const attr = (n: string) => Number(new RegExp(`\\b${n}="(\\d+)"`).exec(root)?.[1] ?? 0);
-  if (!root) return null;
-  return { tests: attr("tests"), failures: attr("failures"), errors: attr("errors"), skipped: attr("skipped") };
+  const suites = xml.match(/<testsuite\b[^>]*>/g) ?? [];
+  if (!suites.length) return null;
+  const sum = (n: string) =>
+    suites.reduce((t, tag) => t + Number(new RegExp(`\\b${n}="(\\d+)"`).exec(tag)?.[1] ?? 0), 0);
+  return { tests: sum("tests"), failures: sum("failures"), errors: sum("errors"), skipped: sum("skipped") };
 }
 
 export const test = defineJob({
   path: "/v1/test",
   price: "$0.25",
   description:
-    "CI-as-a-call: clones a public git repository at an exact commit/branch/tag inside a fresh E2B microVM, installs dependencies, runs its test suite (auto-detected for Node, Python, Go, Rust or your command) and returns pass/fail, the resolved commit SHA, JUnit XML and full logs as hashed evidence.",
+    "CI-as-a-call: clones a public git repository at an exact commit/branch/tag inside a fresh gVisor-sandboxed container (egress to public internet only), installs dependencies, runs its test suite (auto-detected for Node or Python, or your command) and returns pass/fail, the resolved commit SHA, JUnit XML and full logs as hashed evidence.",
   input: z.object({
     repo: z.url({ protocol: /^https$/ }).describe("Public HTTPS git URL, e.g. https://github.com/owner/repo"),
     ref: z
@@ -65,30 +54,30 @@ export const test = defineJob({
   },
   timeoutMs: 720_000,
   async run(input, signal) {
-    return withSandbox((input.timeout_seconds + 120) * 1000, signal, async (sbx) => {
+    return withSandbox({ timeoutMs: (input.timeout_seconds * 2 + 180) * 1000, network: true }, signal, async (sbx) => {
       const started = Date.now();
       const q = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
-      const clone = await exec(
-        sbx.commands.run(
-          `git init -q ${DIR} && cd ${DIR} && git remote add origin ${q(input.repo)} && git fetch -q --depth 1 origin ${q(input.ref)} && git checkout -q FETCH_HEAD && git rev-parse HEAD`,
-          { timeoutMs: 120_000 },
-        ),
+      const clone = await sbx.exec(
+        `git init -q ${DIR} && cd ${DIR} && git remote add origin ${q(input.repo)} && git fetch -q --depth 1 origin ${q(input.ref)} && git checkout -q FETCH_HEAD && git rev-parse HEAD`,
+        { timeoutMs: 120_000 },
       );
       if (clone.exitCode !== 0) {
         throw new JobInputError(`git fetch of ${input.repo}@${input.ref} failed: ${clone.stderr.slice(-500)}`);
       }
       const commit = clone.stdout.trim().split("\n").pop() ?? "";
-      const [detInstall, detTest] = (await sbx.commands.run(DETECT, { cwd: DIR })).stdout.trim().split("|||");
+      const [detInstall, detTest] = (await sbx.exec(DETECT, { cwd: DIR, timeoutMs: 10_000 })).stdout
+        .trim()
+        .split("|||");
       const installCmd = input.install ?? detInstall;
       const testCmd = input.command ?? detTest;
       if (!testCmd) {
         throw new JobInputError("could not detect a test command; pass `command`");
       }
       const install = installCmd
-        ? await exec(sbx.commands.run(installCmd, { cwd: DIR, timeoutMs: input.timeout_seconds * 1000 }))
+        ? await sbx.exec(installCmd, { cwd: DIR, timeoutMs: input.timeout_seconds * 1000 })
         : undefined;
-      const run = await exec(sbx.commands.run(testCmd, { cwd: DIR, timeoutMs: input.timeout_seconds * 1000 }));
-      const junitXml = await sbx.files.read(`${DIR}/${input.junit_path}`).catch(() => undefined);
+      const run = await sbx.exec(testCmd, { cwd: DIR, timeoutMs: input.timeout_seconds * 1000 });
+      const junitXml = (await sbx.read(`${DIR}/${input.junit_path}`))?.toString();
       const log = [
         `$ ${installCmd}`,
         install?.stdout,
@@ -111,6 +100,7 @@ export const test = defineJob({
           command: testCmd,
           exit_code: run.exitCode,
           passed: run.exitCode === 0,
+          timed_out: run.timedOut,
           junit: junitXml ? junitSummary(junitXml) : null,
           duration_seconds: Math.round((Date.now() - started) / 100) / 10,
           log_tail: log.slice(-4000),

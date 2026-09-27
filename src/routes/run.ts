@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { type Artifact, defineJob } from "../lib/job.ts";
-import { withSandbox } from "../lib/sandbox.ts";
+import { collectOutputs, lastLine, withSandbox } from "../lib/sandbox.ts";
 
 export const run = defineJob({
   path: "/v1/run",
   price: "$0.05",
   description:
-    "Isolated code execution: runs Python or JavaScript in a fresh Firecracker microVM (no state shared between calls) and returns stdout, stderr, errors and any produced charts/files as hashed artifacts.",
+    "Isolated code execution: runs Python (pandas, numpy, scipy, matplotlib preinstalled) or JavaScript (Node 24) in a fresh gVisor-sandboxed container with no network and no state shared between calls, and returns stdout, stderr, exit code and every file written to ./output (charts, CSVs) as hashed artifacts.",
   input: z.object({
     language: z.enum(["python", "javascript"]).default("python"),
     code: z.string().min(1).max(100_000),
@@ -30,38 +30,35 @@ export const run = defineJob({
     stdout: "42\n",
     stderr: "",
     error: null,
-    results: [{ type: "image/png", artifact: "result-0.png" }],
+    exit_code: 0,
+    files: ["output/chart.png"],
   },
   timeoutMs: 150_000,
   async run(input, signal) {
-    return withSandbox((input.timeout_seconds + 30) * 1000, signal, async (sbx) => {
-      for (const f of input.files) await sbx.files.write(f.path, f.content);
-      const execution = await sbx.runCode(input.code, {
-        language: input.language,
+    return withSandbox({ timeoutMs: (input.timeout_seconds + 30) * 1000 }, signal, async (sbx) => {
+      for (const f of input.files) await sbx.write(`/work/${f.path}`, f.content);
+      const main = input.language === "python" ? "main.py" : "main.mjs";
+      await sbx.write(`/work/${main}`, input.code);
+      await sbx.exec("mkdir -p output", { timeoutMs: 10_000 });
+      const r = await sbx.exec(`${input.language === "python" ? "python3" : "node"} ${main}`, {
         timeoutMs: input.timeout_seconds * 1000,
       });
-      const stdout = execution.logs.stdout.join("");
-      const stderr = execution.logs.stderr.join("");
       const artifacts: Artifact[] = [
-        { name: "stdout.txt", contentType: "text/plain; charset=utf-8", body: stdout },
-        { name: "stderr.txt", contentType: "text/plain; charset=utf-8", body: stderr },
+        { name: "stdout.txt", contentType: "text/plain; charset=utf-8", body: r.stdout },
+        { name: "stderr.txt", contentType: "text/plain; charset=utf-8", body: r.stderr },
+        ...(await collectOutputs(sbx, "/work/output")),
       ];
-      const results = execution.results.map((r, i) => {
-        if (r.png) {
-          const name = `result-${i}.png`;
-          artifacts.push({ name, contentType: "image/png", body: Buffer.from(r.png, "base64") });
-          return { type: "image/png", artifact: name };
-        }
-        return { type: r.json ? "application/json" : "text/plain", value: r.json ?? r.text ?? null };
-      });
       return {
         result: {
-          stdout,
-          stderr,
-          error: execution.error
-            ? { name: execution.error.name, value: execution.error.value, traceback: execution.error.traceback }
-            : null,
-          results,
+          stdout: r.stdout.slice(-50_000),
+          stderr: r.stderr.slice(-50_000),
+          exit_code: r.exitCode,
+          error: r.timedOut
+            ? { name: "Timeout", value: `exceeded ${input.timeout_seconds}s` }
+            : r.exitCode !== 0
+              ? { name: "Error", value: lastLine(r.stderr) }
+              : null,
+          files: artifacts.slice(2).map((a) => a.name),
         },
         artifacts,
       };

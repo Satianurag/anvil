@@ -75,7 +75,6 @@ describe("missing credentials fail clearly", () => {
   it.each([
     ["/v1/research/brief", { topic: "Algorand x402 adoption" }, "GEMINI_API_KEY"],
     ["/v1/analyze", { file: { base64: "YSxiCjEsMgo=", filename: "d.csv" }, question: "sum a" }, "GEMINI_API_KEY"],
-    ["/v1/test", { repo: "https://github.com/pallets/itsdangerous" }, "E2B_API_KEY"],
     ["/v1/extract/invoice", { file: { base64: "JVBERi0=", filename: "i.pdf" } }, "GEMINI_API_KEY"],
   ])("%s", async (path, body, key) => {
     const res = await post(path, body);

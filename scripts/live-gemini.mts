@@ -1,5 +1,5 @@
 /**
- * Live run of every Gemini-backed route (no E2B) with real documents rendered locally.
+ * Live run of every Gemini-backed route (sandbox routes: see live-sandbox.mts) with real documents rendered locally.
  * Requires GEMINI_API_KEY and `docker compose --profile dev up -d`.
  */
 import assert from "node:assert/strict";

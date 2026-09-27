@@ -25,9 +25,9 @@ describe("app (unpaid dev mode)", () => {
   });
 
   it("fails clearly when an integration is not configured", async () => {
-    const res = await post("/v1/run", { language: "python", code: "print(1)" });
+    const res = await post("/v1/extract", { url: "https://example.com/a.pdf", schema: { type: "object" } });
     expect(res.status).toBe(500);
-    expect((await res.json()).message).toBe("E2B_API_KEY is not configured");
+    expect((await res.json()).message).toBe("GEMINI_API_KEY is not configured");
   });
 
   it("validates txid format on /v1/verify", async () => {
