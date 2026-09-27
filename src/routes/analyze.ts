@@ -21,7 +21,7 @@ export const analyze = defineJob({
   path: "/v1/analyze",
   price: "$0.10",
   description:
-    "Data analysis as a call: send a CSV/TSV/JSON/Parquet/Excel dataset and a question; Gemini writes pandas/matplotlib code, it runs in a fresh gVisor-sandboxed container with no network (with one self-repair attempt), and you get the answer, the exact code, charts and transformed files as hashed artifacts.",
+    "Data analysis as a call: send a CSV/TSV/JSON/Parquet/Excel dataset and a question; Gemini writes pandas/matplotlib code, it runs in a fresh ephemeral Daytona sandbox with no network (with one self-repair attempt), and you get the answer, the exact code, charts and transformed files as hashed artifacts.",
   input: z
     .object({
       url: z

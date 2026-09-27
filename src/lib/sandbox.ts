@@ -1,105 +1,78 @@
-import { execFile, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
-import { config } from "../config.ts";
+import { Daytona, type Sandbox as DaytonaSandbox } from "@daytona/sdk";
+import { config, requireEnv } from "../config.ts";
 
-const docker = promisify(execFile);
-const RESOLV = fileURLToPath(new URL("../../sandbox/resolv.conf", import.meta.url));
 const q = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+let client: Daytona | undefined;
 
 export type CommandResult = { stdout: string; stderr: string; exitCode: number; timedOut: boolean };
 
-/** Runs `docker` with optional stdin, collecting output as buffers. */
-function dockerIo(args: string[], stdin?: Uint8Array | string) {
-  return new Promise<{ stdout: Buffer; stderr: Buffer; code: number }>((resolve, reject) => {
-    const p = spawn("docker", args, { stdio: ["pipe", "pipe", "pipe"] });
-    const out: Buffer[] = [];
-    const err: Buffer[] = [];
-    p.stdout.on("data", (d) => out.push(d));
-    p.stderr.on("data", (d) => err.push(d));
-    p.on("error", reject);
-    p.on("close", (code) => resolve({ stdout: Buffer.concat(out), stderr: Buffer.concat(err), code: code ?? 1 }));
-    p.stdin.end(stdin);
-  });
-}
-
+/** Thin adapter over a Daytona sandbox with separate stdout/stderr and hard command timeouts. */
 export class Sandbox {
-  constructor(readonly id: string) {}
+  constructor(readonly sbx: DaytonaSandbox) {}
 
   /** Runs a shell command; a nonzero exit is returned, not thrown. Timed-out commands exit 137. */
   async exec(command: string, opts: { cwd?: string; timeoutMs: number }): Promise<CommandResult> {
     const secs = Math.ceil(opts.timeoutMs / 1000);
-    const r = await dockerIo([
-      "exec",
-      "-w",
+    const r = await this.sbx.process.executeCommand(
+      `timeout -s KILL ${secs} bash -c ${q(command)} >/tmp/.anvil-out 2>/tmp/.anvil-err`,
       opts.cwd ?? "/work",
-      this.id,
-      "timeout",
-      "-s",
-      "KILL",
-      String(secs),
-      "bash",
-      "-c",
-      command,
-    ]);
-    return { stdout: r.stdout.toString(), stderr: r.stderr.toString(), exitCode: r.code, timedOut: r.code === 137 };
+      undefined,
+      secs + 30,
+    );
+    const [stdout, stderr] = await Promise.all([this.read("/tmp/.anvil-out"), this.read("/tmp/.anvil-err")]);
+    return {
+      stdout: stdout?.toString() ?? "",
+      stderr: stderr?.toString() ?? "",
+      exitCode: r.exitCode,
+      timedOut: r.exitCode === 137,
+    };
   }
 
   async write(path: string, data: Uint8Array | string) {
-    const r = await dockerIo(
-      ["exec", "-i", this.id, "sh", "-c", `mkdir -p "$(dirname ${q(path)})" && cat > ${q(path)}`],
-      data,
-    );
-    if (r.code !== 0) throw new Error(`sandbox write ${path}: ${r.stderr}`);
+    await this.sbx.process.executeCommand(`mkdir -p "$(dirname ${q(path)})"`);
+    await this.sbx.fs.uploadFile(Buffer.from(data), path);
   }
 
   async read(path: string): Promise<Buffer | undefined> {
-    const r = await dockerIo(["exec", this.id, "cat", path]);
-    return r.code === 0 ? r.stdout : undefined;
+    return this.sbx.fs.downloadFile(path).catch(() => undefined);
   }
 
   /** Regular files directly inside `dir` (names only). */
   async list(dir: string) {
-    const r = await dockerIo(["exec", this.id, "find", dir, "-maxdepth", "1", "-type", "f", "-printf", "%f\\n"]);
-    return r.code === 0 ? r.stdout.toString().split("\n").filter(Boolean).sort() : [];
+    const files = await this.sbx.fs.listFiles(dir).catch(() => []);
+    return files
+      .filter((f) => !f.isDir)
+      .map((f) => f.name)
+      .sort();
   }
 }
 
 /**
- * Runs `fn` in a fresh throwaway container (gVisor runtime, no capabilities, resource limits) that is always
- * removed afterwards. `network: false` gives no network at all; `true` uses the egress-only SANDBOX_NETWORK.
+ * Runs `fn` in a fresh ephemeral Daytona sandbox (from DAYTONA_SNAPSHOT) that is always deleted afterwards.
+ * `network: false` blocks all outbound traffic; `true` keeps the organisation's default egress policy.
  */
 export async function withSandbox<T>(
   opts: { timeoutMs: number; network?: boolean },
   signal: AbortSignal,
   fn: (sbx: Sandbox) => Promise<T>,
 ) {
-  const name = `anvil-sbx-${randomUUID()}`;
-  await docker("docker", [
-    "run",
-    "-d",
-    "--rm",
-    "--name",
-    name,
-    `--runtime=${config.SANDBOX_RUNTIME}`,
-    ...(opts.network
-      ? [`--network=${config.SANDBOX_NETWORK}`, `--volume=${RESOLV}:/etc/resolv.conf:ro`]
-      : ["--network=none"]),
-    "--cap-drop=ALL",
-    "--security-opt=no-new-privileges",
-    `--memory=${config.SANDBOX_MEMORY}`,
-    `--cpus=${config.SANDBOX_CPUS}`,
-    "--pids-limit=512",
-    "--label=anvil-sandbox",
-    config.SANDBOX_IMAGE,
-    "sleep",
-    String(Math.ceil(opts.timeoutMs / 1000)),
-  ]);
-  const kill = () => docker("docker", ["rm", "-f", name]).catch(() => undefined);
+  requireEnv("DAYTONA_API_KEY");
+  client ??= new Daytona({ apiKey: config.DAYTONA_API_KEY, apiUrl: config.DAYTONA_API_URL });
+  const sbx = await client.create(
+    {
+      snapshot: config.DAYTONA_SNAPSHOT,
+      ephemeral: true,
+      autoStopInterval: Math.ceil(opts.timeoutMs / 60_000) + 1,
+      ttlMinutes: Math.ceil(opts.timeoutMs / 60_000) + 5,
+      networkBlockAll: !opts.network,
+      labels: { app: "anvil" },
+    },
+    { timeout: 120 },
+  );
+  const kill = () => sbx.delete().catch(() => undefined);
   signal.addEventListener("abort", kill);
   try {
-    return await fn(new Sandbox(name));
+    return await fn(new Sandbox(sbx));
   } finally {
     signal.removeEventListener("abort", kill);
     await kill();
