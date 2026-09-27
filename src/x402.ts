@@ -11,6 +11,8 @@ import { config } from "./config.ts";
 import type { JobDefinition } from "./lib/job.ts";
 
 export const CHALLENGE_TAG = "x402-global-challenge";
+/** Settle before running the job: the AVM client signs with a ~10-round validity window, shorter than long jobs. */
+export const PAYMENT_EXTRA = { tag: CHALLENGE_TAG, paymentFlow: "upfront" };
 
 export function createResourceServer(
   facilitator: FacilitatorClient = new HTTPFacilitatorClient({ url: config.FACILITATOR_URL }),
@@ -34,7 +36,7 @@ export function paidRoutes(jobs: JobDefinition[], payTo: string): RoutesConfig {
           network: config.network,
           payTo,
           maxTimeoutSeconds: 300,
-          extra: { tag: CHALLENGE_TAG },
+          extra: PAYMENT_EXTRA,
         },
         resource: new URL(job.path, config.PUBLIC_URL).href,
         description: job.description,

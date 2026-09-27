@@ -6,12 +6,18 @@ import { HTTPException } from "hono/http-exception";
 import { config } from "./config.ts";
 import { paymentTxId } from "./lib/chain.ts";
 import { type JobDefinition, JobInputError } from "./lib/job.ts";
-import { executeJob, lookupHash, recordSettlement, verifyReceipt } from "./lib/receipts.ts";
+import { executeJob, lookupHash, precheck, recordSettlement, verifyReceipt } from "./lib/receipts.ts";
 import { UnsafeTargetError } from "./lib/ssrf.ts";
 import { CHALLENGE_TAG, paidRoutes } from "./x402.ts";
 
 export function createApp(jobs: JobDefinition[], resourceServer?: x402ResourceServer, extra?: (app: Hono) => void) {
   const app = new Hono();
+
+  for (const job of jobs)
+    app.post(job.path, async (c, next) => {
+      await precheck(job, await c.req.json().catch(() => Promise.reject(new JobInputError("body must be JSON"))));
+      await next();
+    });
 
   if (resourceServer && config.PAY_TO) {
     resourceServer.onAfterSettle(({ result }) => recordSettlement(result.transaction));

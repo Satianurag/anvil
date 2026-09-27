@@ -8,8 +8,8 @@ import { z } from "zod";
 import { config } from "./config.ts";
 import { paymentTxId } from "./lib/chain.ts";
 import type { JobDefinition } from "./lib/job.ts";
-import { executeJob } from "./lib/receipts.ts";
-import { CHALLENGE_TAG } from "./x402.ts";
+import { executeJob, precheck } from "./lib/receipts.ts";
+import { CHALLENGE_TAG, PAYMENT_EXTRA } from "./x402.ts";
 
 export const toolName = (job: JobDefinition) => job.path.replace(/^\/v1\//, "").replace(/[/-]/g, "_");
 
@@ -49,7 +49,7 @@ export async function buildTools(jobs: JobDefinition[], resourceServer?: x402Res
           payTo: config.PAY_TO,
           price: job.price,
           maxTimeoutSeconds: 300,
-          extra: { tag: CHALLENGE_TAG },
+          extra: PAYMENT_EXTRA,
         });
         const paid = createPaymentWrapper(resourceServer, {
           accepts,
@@ -69,7 +69,18 @@ export async function buildTools(jobs: JobDefinition[], resourceServer?: x402Res
             output: { example: job.outputExample },
           }),
         });
-        cb = paid((args, ctx) => handler(job)(args, ctx)) as Wrapped;
+        const paidCb = paid((args, ctx) => handler(job)(args, ctx)) as Wrapped;
+        cb = async (args, extra) => {
+          try {
+            await precheck(job, args);
+          } catch (err) {
+            return {
+              content: [{ type: "text", text: `${job.path} invalid input: ${(err as Error).message}` }],
+              isError: true,
+            };
+          }
+          return paidCb(args, extra);
+        };
       }
       return { job, name, cb };
     }),
