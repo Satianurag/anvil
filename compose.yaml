@@ -11,6 +11,11 @@ services:
     image: ghcr.io/docling-project/docling-serve-cpu:v1.35.0
     ports: ["127.0.0.1:5001:5001"]
     restart: unless-stopped
+  gotenberg:
+    image: gotenberg/gotenberg:8.37.0
+    command: ["gotenberg", "--chromium-deny-private-ips=true", "--chromium-allow-list=^file:///tmp/.*"]
+    ports: ["127.0.0.1:3002:3000"]
+    restart: unless-stopped
   # Local S3-compatible store for development; use Cloudflare R2 in production.
   s3:
     image: versity/versitygw:latest

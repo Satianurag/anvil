@@ -36,13 +36,16 @@ export interface ReceiptNote {
 }
 
 /** Writes a 0-ALGO self-payment whose ARC-2 note binds the payment to the manifest hash. */
-export async function anchorReceipt(note: ReceiptNote): Promise<string> {
+export const anchorReceipt = (note: ReceiptNote) => anchorNote(NOTE_PREFIX, note);
+
+/** Writes a 0-ALGO self-payment carrying an ARC-2 (`anvil/v1:j{...}`) JSON note; returns the txid. */
+export async function anchorNote(prefix: string, note: object): Promise<string> {
   const acct = receiptAccount();
   const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
     sender: acct.addr,
     receiver: acct.addr,
     amount: 0,
-    note: new TextEncoder().encode(NOTE_PREFIX + JSON.stringify(note)),
+    note: new TextEncoder().encode(prefix + JSON.stringify(note)),
     suggestedParams: await algod().getTransactionParams().do(),
   });
   const { txid } = await algod().sendRawTransaction(txn.signTxn(acct.sk)).do();
@@ -52,4 +55,10 @@ export async function anchorReceipt(note: ReceiptNote): Promise<string> {
 
 export async function lookupTransaction(txId: string) {
   return (await indexer().lookupTransactionByID(txId).do()).transaction;
+}
+
+/** Ed25519 signature (algosdk "MX"-prefixed signBytes) by the receipt account, verifiable with algosdk.verifyBytes. */
+export function signWithReceiptKey(data: Uint8Array) {
+  const acct = receiptAccount();
+  return { signer: acct.addr.toString(), signature: Buffer.from(algosdk.signBytes(data, acct.sk)).toString("base64") };
 }

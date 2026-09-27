@@ -11,6 +11,8 @@ export interface JobOutput {
   result: unknown;
   /** Binary/text artifacts stored, hashed and listed in the manifest */
   artifacts?: Artifact[];
+  /** Extra SHA-256 hashes (besides artifact hashes) that GET /v1/verify/hash/:sha256 should resolve to this job */
+  index?: string[];
 }
 
 export interface JobDefinition<S extends z.ZodType = z.ZodType> {
@@ -29,4 +31,11 @@ export interface JobDefinition<S extends z.ZodType = z.ZodType> {
 export const defineJob = <S extends z.ZodType>(job: JobDefinition<S>) => job;
 
 /** Thrown for caller errors; mapped to HTTP 422 so the payment is not settled. */
-export class JobInputError extends Error {}
+export class JobInputError extends Error {
+  constructor(
+    message: string,
+    readonly details?: unknown,
+  ) {
+    super(message);
+  }
+}
