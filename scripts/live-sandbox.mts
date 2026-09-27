@@ -73,5 +73,11 @@ assert.equal(t.passed, true, t.log_tail);
 assert.ok(t.junit?.tests > 0, JSON.stringify(t.junit));
 console.log(`  test: ${t.commit.slice(0, 8)} ${JSON.stringify(t.junit)} ${t.duration_seconds}s`);
 
+for (const repo of ["https://github.com/google/uuid", "https://github.com/rust-lang/cfg-if"]) {
+  const r = await post("/v1/test", { repo, timeout_seconds: 600 });
+  assert.equal(r.passed, true, r.log_tail);
+  console.log(`  test: ${repo} ${r.commit.slice(0, 8)} ${r.duration_seconds}s`);
+}
+
 console.log("LIVE SANDBOX PASSED");
 process.exit(0);

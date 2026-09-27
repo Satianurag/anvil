@@ -12,6 +12,8 @@ if [ -f package.json ]; then
   else echo "npm ci || npm install|||npm test"; fi
 elif [ -f pyproject.toml ] || [ -f setup.py ] || [ -f requirements.txt ]; then
   echo 'pip install -q pytest; [ -f requirements.txt ] && pip install -q -r requirements.txt; if [ -f pyproject.toml ] || [ -f setup.py ]; then pip install -q -e ".[test,tests]" || pip install -q -e .; fi; for g in test tests dev; do pip install -q --group $g 2>/dev/null; done; true|||python -m pytest --junitxml=junit.xml -q'
+elif [ -f go.mod ]; then echo "go mod download|||go test ./...";
+elif [ -f Cargo.toml ]; then echo "cargo fetch|||cargo test";
 else echo "|||"; fi`;
 
 function junitSummary(xml: string) {
@@ -26,7 +28,7 @@ export const test = defineJob({
   path: "/v1/test",
   price: "$0.25",
   description:
-    "CI-as-a-call: clones a public git repository at an exact commit/branch/tag inside a fresh gVisor-sandboxed container (egress to public internet only), installs dependencies, runs its test suite (auto-detected for Node or Python, or your command) and returns pass/fail, the resolved commit SHA, JUnit XML and full logs as hashed evidence.",
+    "CI-as-a-call: clones a public git repository at an exact commit/branch/tag inside a fresh gVisor-sandboxed container (egress to public internet only), installs dependencies, runs its test suite (auto-detected for Node, Python, Go or Rust, or your command) and returns pass/fail, the resolved commit SHA, JUnit XML and full logs as hashed evidence.",
   input: z.object({
     repo: z.url({ protocol: /^https$/ }).describe("Public HTTPS git URL, e.g. https://github.com/owner/repo"),
     ref: z
