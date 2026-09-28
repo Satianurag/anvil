@@ -7,7 +7,8 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/anvil
 # Same browser engine the compose service runs, minus the container.
-ExecStart=/home/ubuntu/anvil/node_modules/.bin/playwright run-server --port 3001 --host 127.0.0.1
+# playwright is installed globally: sudo npm i -g playwright@$(node -p "require('./package.json').dependencies['playwright-core']")
+ExecStart=/usr/bin/playwright run-server --port 3001 --host 127.0.0.1
 Restart=always
 RestartSec=5
 MemoryMax=600M
