@@ -42,13 +42,25 @@ const env = z
     VERCEL_PROJECT_ID: z.string().optional(),
     VERCEL_SANDBOX_SNAPSHOT: z.string().optional(),
     DOCLING_URL: z.url().default("http://localhost:5001"),
-    GOTENBERG_URL: z.url().default("http://localhost:3002"),
+    // PDF rendering backend: Gotenberg when set, else the shared remote browser prints the PDF.
+    GOTENBERG_URL: z.url().optional(),
     PAGESPEED_API_KEY: z.string().optional(),
     MONITOR_TICK_SECONDS: z.coerce.number().default(60),
     BROWSER_WS_URL: z.url().default("ws://localhost:3001/"),
     ALLOW_PRIVATE_TARGETS: z.stringbool().default(false),
+    // Max request body bytes (covers the largest legit input: ~20 MB base64 file + JSON overhead).
+    MAX_BODY_BYTES: z.coerce.number().default(33_554_432),
+    // Per-artifact byte cap; larger text artifacts are truncated, larger binaries are dropped.
+    MAX_ARTIFACT_BYTES: z.coerce.number().default(33_554_432),
+    // Concurrency caps: all jobs, Vercel Sandbox microVMs, remote-browser sessions.
+    JOB_CONCURRENCY: z.coerce.number().default(4),
+    SANDBOX_CONCURRENCY: z.coerce.number().default(2),
+    BROWSER_CONCURRENCY: z.coerce.number().default(4),
   })
   .parse(Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== "")));
+
+if (env.ALGORAND_NETWORK === "mainnet" && /^(https?:\/\/)?(localhost|127\.|\[?::1\]?|0\.0\.0\.0)/.test(env.PUBLIC_URL))
+  throw new Error("PUBLIC_URL must be your public HTTPS domain when ALGORAND_NETWORK=mainnet");
 
 const net = NETWORKS[env.ALGORAND_NETWORK];
 

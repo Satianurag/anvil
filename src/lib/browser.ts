@@ -2,6 +2,7 @@ import { Defuddle } from "defuddle/node";
 import { parseHTML } from "linkedom";
 import { type BrowserContext, chromium, type Page } from "playwright-core";
 import { config } from "../config.ts";
+import { Semaphore, withLimit } from "./limiter.ts";
 import { assertPublicUrl } from "./ssrf.ts";
 
 export interface PageOptions {
@@ -9,8 +10,17 @@ export interface PageOptions {
   signal: AbortSignal;
 }
 
+const sem = new Semaphore(config.BROWSER_CONCURRENCY);
+
 /** Opens a fresh context on the remote browser where every request (incl. redirects/subresources) passes the SSRF policy. */
 export async function withPage<T>(
+  opts: PageOptions,
+  fn: (page: Page, context: BrowserContext) => Promise<T>,
+): Promise<T> {
+  return withLimit(sem, () => withPageInner(opts, fn));
+}
+
+async function withPageInner<T>(
   opts: PageOptions,
   fn: (page: Page, context: BrowserContext) => Promise<T>,
 ): Promise<T> {

@@ -66,11 +66,20 @@ export const extract = defineJob({
   path: "/v1/extract",
   price: "$0.10",
   description:
-    "Schema-faithful document extraction: converts a PDF, DOCX, XLSX, PPTX, HTML or image (first 5 pages, OCR included) and returns JSON that validates against your JSON Schema, with a verbatim source quote for every extracted field.",
+    "Schema-faithful document extraction: converts a PDF, DOCX, XLSX, PPTX, HTML or image (first 5 pages, OCR included) and returns JSON checked against your JSON Schema (a `valid` flag plus the validation errors), with verbatim source quotes for extracted fields.",
   input: z
     .object({
       ...documentSource.shape,
-      schema: z.record(z.string(), z.unknown()).describe("JSON Schema (draft 2020-12) of the object to extract"),
+      schema: z
+        .record(z.string(), z.unknown())
+        .describe("JSON Schema (draft 2020-12) of the object to extract")
+        .superRefine((s, ctx) => {
+          try {
+            ajv.compile(s);
+          } catch (err) {
+            ctx.addIssue({ code: "custom", message: `invalid JSON Schema: ${(err as Error).message}` });
+          }
+        }),
       instructions: z.string().max(2000).optional(),
     })
     .refine((v) => !!v.url !== !!v.file, "provide exactly one of url or file"),

@@ -1,7 +1,9 @@
 import { type NetworkPolicy, Sandbox as VercelSandbox } from "@vercel/sandbox";
-import { requireEnv } from "../config.ts";
+import { config, requireEnv } from "../config.ts";
+import { Semaphore, withLimit } from "./limiter.ts";
 
 const q = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+const sem = new Semaphore(config.SANDBOX_CONCURRENCY);
 
 /** Egress for /v1/test: git hosts and package registries only. */
 const REGISTRIES: NetworkPolicy = {
@@ -69,26 +71,29 @@ export async function withSandbox<T>(
   signal: AbortSignal,
   fn: (sbx: Sandbox) => Promise<T>,
 ) {
-  const sbx = await VercelSandbox.create({
-    token: requireEnv("VERCEL_TOKEN"),
-    teamId: requireEnv("VERCEL_TEAM_ID"),
-    projectId: requireEnv("VERCEL_PROJECT_ID"),
-    source: { type: "snapshot", snapshotId: requireEnv("VERCEL_SANDBOX_SNAPSHOT") },
-    resources: { vcpus: 2 },
-    timeout: opts.timeoutMs + 60_000,
-    networkPolicy: opts.network ? REGISTRIES : "deny-all",
-    persistent: false,
-    tags: { app: "anvil" },
-    signal,
+  // Vercel Sandbox microVMs are the most expensive resource a request can spawn — cap how many run at once.
+  return withLimit(sem, async () => {
+    const sbx = await VercelSandbox.create({
+      token: requireEnv("VERCEL_TOKEN"),
+      teamId: requireEnv("VERCEL_TEAM_ID"),
+      projectId: requireEnv("VERCEL_PROJECT_ID"),
+      source: { type: "snapshot", snapshotId: requireEnv("VERCEL_SANDBOX_SNAPSHOT") },
+      resources: { vcpus: 2 },
+      timeout: opts.timeoutMs + 60_000,
+      networkPolicy: opts.network ? REGISTRIES : "deny-all",
+      persistent: false,
+      tags: { app: "anvil" },
+      signal,
+    });
+    const stop = () => sbx.stop().catch(() => undefined);
+    signal.addEventListener("abort", stop);
+    try {
+      return await fn(new Sandbox(sbx));
+    } finally {
+      signal.removeEventListener("abort", stop);
+      await stop();
+    }
   });
-  const stop = () => sbx.stop().catch(() => undefined);
-  signal.addEventListener("abort", stop);
-  try {
-    return await fn(new Sandbox(sbx));
-  } finally {
-    signal.removeEventListener("abort", stop);
-    await stop();
-  }
 }
 
 export const lastLine = (s: string) => s.trim().split("\n").pop() ?? "";
@@ -103,9 +108,16 @@ const TYPES: Record<string, string> = {
   md: "text/markdown; charset=utf-8",
 };
 
-/** Up to 20 files from `dir` as `output/<name>` artifacts. */
+/** Up to 20 files from `dir` as `output/<name>` artifacts, each under MAX_ARTIFACT_BYTES. */
 export async function collectOutputs(sbx: Sandbox, dir: string) {
-  const names = (await sbx.list(dir)).slice(0, 20);
+  const capK = Math.floor(config.MAX_ARTIFACT_BYTES / 1024);
+  const names = (
+    await sbx.exec(`find ${q(dir)} -maxdepth 1 -type f -size -${capK}k -printf '%f\\n'`, { timeoutMs: 10_000 })
+  ).stdout
+    .split("\n")
+    .filter(Boolean)
+    .sort()
+    .slice(0, 20);
   const files = await Promise.all(names.map((n) => sbx.read(`${dir}/${n}`)));
   return names.flatMap((n, i) => {
     const body = files[i];

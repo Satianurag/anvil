@@ -1,0 +1,21 @@
+[Unit]
+Description=anvil document conversion (docling-serve)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+ExecStart=/home/ubuntu/docling-venv/bin/docling-serve run --host 127.0.0.1 --port 5001
+Restart=always
+RestartSec=5
+# Docling's first inference loads models — keep the timeout generous.
+TimeoutStartSec=300
+MemoryMax=700M
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
