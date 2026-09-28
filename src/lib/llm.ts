@@ -13,11 +13,18 @@ async function generate(models: string, params: Omit<GenerateContentParameters, 
     .map((m) => m.trim())
     .filter(Boolean);
   for (const [i, model] of list.entries()) {
-    try {
-      return await ai().models.generateContent({ ...params, model });
-    } catch (err) {
-      if (i === list.length - 1 || !(err instanceof ApiError && RETRYABLE.has(err.status))) throw err;
-      console.warn(`gemini ${model} HTTP ${err.status}, falling back to ${list[i + 1]}`);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await ai().models.generateContent({ ...params, model });
+      } catch (err) {
+        if (!(err instanceof ApiError && RETRYABLE.has(err.status))) throw err;
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 2_000 * (attempt + 1)));
+          continue;
+        }
+        if (i === list.length - 1) throw err;
+        console.warn(`gemini ${model} HTTP ${err.status}, falling back to ${list[i + 1]}`);
+      }
     }
   }
   throw new Error("no Gemini model configured");
