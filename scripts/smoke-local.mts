@@ -39,8 +39,12 @@ const certLookup = await (await app.request(`/v1/verify/hash/${cert.result.pdf_s
 assert.equal(certLookup.found, true);
 console.log("OK certificate signature verifies + hash lookup");
 
-await post("/v1/evidence", { url: "https://example.com" });
-const audit = await post("/v1/audit/site", { url: "https://example.com" });
+// Deterministic fetch target served from the repo itself (raw.githubusercontent.com) — third-party
+// pages like example.com drift and now even drop <h1> elements; never depend on them in smoke tests.
+const FIXTURE = "https://raw.githubusercontent.com/Satianurag/anvil/main/test/fixtures/smoke-page.html";
+
+await post("/v1/evidence", { url: FIXTURE });
+const audit = await post("/v1/audit/site", { url: FIXTURE });
 console.log(
   "  lighthouse:",
   audit.result.scores ? "scored" : `degraded (${String(audit.result.lighthouse_error).slice(0, 80)})`,
@@ -49,25 +53,26 @@ assert.ok(audit.result.accessibility.engine.startsWith("axe-core"));
 assert.ok(Array.isArray(audit.result.seo.issues));
 
 const br = await post("/v1/browse/act", {
-  url: "https://example.com",
+  url: FIXTURE,
   steps: [
     { action: "extract", name: "heading", selector: "h1" },
     { action: "screenshot", name: "start" },
     { action: "click", selector: "a" },
-    { action: "extract", name: "title", selector: "h1" },
+    { action: "extract", name: "after", selector: "body" },
   ],
 });
-assert.equal(br.result.extracted.heading, "Example Domain");
+assert.equal(br.result.extracted.heading, "Anvil smoke fixture v1");
 assert.equal(br.result.completed, true, JSON.stringify(br.result.steps));
+assert.match(br.result.final_url, /example\.com/, "click should navigate to the fixture's outbound link");
 
-const mon = await post("/v1/monitor", { url: "https://example.com", interval_minutes: 15, checks: 2 });
+const mon = await post("/v1/monitor", { url: FIXTURE, interval_minutes: 15, checks: 2 });
 const { getJson } = await import("../src/lib/storage.ts");
 const record = await getJson<Json>(`monitors/${mon.result.monitor_id}.json`);
 record.last_sha256 = "0".repeat(64);
 record.last_lines = ["stale line"];
 const check = await runCheck(record, AbortSignal.timeout(90_000));
 assert.equal(check.changed, true);
-assert.ok(check.added?.includes("Example Domain"));
+assert.ok(check.added?.includes("Anvil smoke fixture v1"), JSON.stringify(check.added));
 const status = await monitorStatus(mon.result.monitor_id);
 assert.equal(status?.checks_done, 1);
 assert.ok(status?.history[0].screenshot_url);
@@ -79,7 +84,8 @@ const bad = await app.request("/v1/audit/site", {
   body: JSON.stringify({ url: "http://169.254.169.254/" }),
 });
 const paid = !!process.env.LIVE_PAYER_MNEMONIC;
-assert.equal(bad.status, paid ? 402 : 422);
+// Precheck (schema + SSRF) runs BEFORE the payment middleware, so bad input is never charged — paid or not.
+assert.equal(bad.status, 422);
 
 const rpc = async (method: string, params: unknown) => {
   const res = await app.request("/mcp", {

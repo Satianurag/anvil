@@ -1,0 +1,22 @@
+[Unit]
+Description=anvil — x402 pay-per-job execution + artifact service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/anvil
+EnvironmentFile=/home/ubuntu/anvil/.env
+ExecStart=/usr/bin/env node --import tsx src/server.ts
+Restart=always
+RestartSec=5
+# SIGTERM drains in-flight requests before exit (see src/server.ts)
+TimeoutStopSec=20
+MemoryMax=700M
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

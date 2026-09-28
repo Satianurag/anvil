@@ -4,7 +4,7 @@ import { config, requireEnv } from "../config.ts";
 let client: GoogleGenAI | undefined;
 const ai = () => (client ??= new GoogleGenAI({ apiKey: requireEnv("GEMINI_API_KEY") }));
 
-const RETRYABLE = new Set([429, 500, 503, 504]);
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 
 /** Tries each comma-separated model in order, falling through on overload / quota errors. */
 async function generate(models: string, params: Omit<GenerateContentParameters, "model">) {

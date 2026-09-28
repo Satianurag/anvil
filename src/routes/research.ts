@@ -29,7 +29,7 @@ export const research = defineJob({
   path: "/v1/research/brief",
   price: "$0.75",
   description:
-    "Cited research brief / due-diligence dossier: Gemini with live Google Search grounding writes a structured brief where every claim carries numbered citations; each cited source page is snapshotted and SHA-256 hashed so the evidence survives link rot. Returns Markdown, PDF and source snapshots.",
+    "Cited research brief / due-diligence dossier: Gemini with live Google Search grounding writes a structured brief where every claim carries numbered citations; the top cited source pages (up to 10) are snapshotted and SHA-256 hashed so the evidence survives link rot. Returns Markdown, PDF and source snapshots.",
   input: z.object({
     topic: z.string().min(3).max(500).describe('e.g. "Due diligence on Acme Robotics Inc." or a research question'),
     focus: z.string().max(1000).optional().describe("Angles to cover, audience, exclusions"),

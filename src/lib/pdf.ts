@@ -1,4 +1,6 @@
+import { marked } from "marked";
 import { config } from "../config.ts";
+import { withPage } from "./browser.ts";
 
 const esc = (s: unknown) =>
   String(s ?? "").replace(
@@ -38,17 +40,42 @@ async function gotenberg(route: string, files: Record<string, string | Uint8Arra
   return new Uint8Array(await res.arrayBuffer());
 }
 
-/** Renders a self-contained HTML document to PDF with Gotenberg (Chromium). */
-export const htmlToPdf = (doc: string, signal: AbortSignal, assets: Record<string, Uint8Array> = {}) =>
-  gotenberg("/forms/chromium/convert/html", { "index.html": doc, ...assets }, signal);
+/** Chromium print-to-PDF on the shared remote browser (the no-Gotenberg path). */
+async function playwrightPdf(doc: string, signal: AbortSignal, assets: Record<string, Uint8Array>) {
+  return withPage({ signal }, async (page) => {
+    const names = Object.keys(assets);
+    if (names.length)
+      await page.route("**/*", async (route) => {
+        const name = names.find((n) => new URL(route.request().url()).pathname.endsWith(`/${n}`));
+        if (name) await route.fulfill({ body: Buffer.from(assets[name]) });
+        else await route.continue();
+      });
+    await page.setContent(doc, { waitUntil: "load" });
+    return new Uint8Array(await page.pdf({ printBackground: true, format: "A4" }));
+  });
+}
 
-/** Renders Markdown to PDF with Gotenberg's markdown route. */
-export const markdownToPdf = (markdown: string, title: string, signal: AbortSignal) =>
-  gotenberg(
-    "/forms/chromium/convert/markdown",
-    {
-      "index.html": html`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${raw(BASE_CSS)}</style></head><body>{{ toHTML "content.md" }}</body></html>`,
-      "content.md": markdown,
-    },
+/** Renders a self-contained HTML document to PDF — Gotenberg when configured, else the remote browser. */
+export const htmlToPdf = (doc: string, signal: AbortSignal, assets: Record<string, Uint8Array> = {}) =>
+  config.GOTENBERG_URL
+    ? gotenberg("/forms/chromium/convert/html", { "index.html": doc, ...assets }, signal)
+    : playwrightPdf(doc, signal, assets);
+
+/** Renders Markdown to PDF — Gotenberg's markdown route, else marked + the remote browser. */
+export const markdownToPdf = async (markdown: string, title: string, signal: AbortSignal) => {
+  if (config.GOTENBERG_URL)
+    return gotenberg(
+      "/forms/chromium/convert/markdown",
+      {
+        "index.html": html`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${raw(BASE_CSS)}</style></head><body>{{ toHTML "content.md" }}</body></html>`,
+        "content.md": markdown,
+      },
+      signal,
+    );
+  const body = await marked.parse(markdown);
+  return playwrightPdf(
+    html`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${raw(BASE_CSS)}</style></head><body>${raw(body)}</body></html>`,
     signal,
+    {},
   );
+};
