@@ -39,9 +39,10 @@ const certLookup = await (await app.request(`/v1/verify/hash/${cert.result.pdf_s
 assert.equal(certLookup.found, true);
 console.log("OK certificate signature verifies + hash lookup");
 
-// Deterministic fetch target served from the repo itself (raw.githubusercontent.com) — third-party
-// pages like example.com drift and now even drop <h1> elements; never depend on them in smoke tests.
-const FIXTURE = "https://raw.githubusercontent.com/Satianurag/anvil/main/test/fixtures/smoke-page.html";
+// Deterministic fetch target: the repo's test/fixtures/smoke-page.html deployed as a static file
+// (raw.githubusercontent.com/jsdelivr serve text/plain, which has no DOM). Third-party pages like
+// example.com drift — its redesign removed <h1> entirely and broke these assertions.
+const FIXTURE = "https://anvil-fixtures.vercel.app/smoke-page.html";
 
 await post("/v1/evidence", { url: FIXTURE });
 const audit = await post("/v1/audit/site", { url: FIXTURE });
