@@ -19,7 +19,11 @@ sudo apt-get install -y nodejs nginx certbot python3-certbot-nginx python3-venv
 ```bash
 git clone https://github.com/Satianurag/anvil ~/anvil && cd ~/anvil
 corepack enable && pnpm install --frozen-lockfile
-npx playwright install --with-deps chromium   # browser binaries + libs for run-server
+# Remote-browser service: the playwright CLI lives in the `playwright` package
+# (playwright-core, the app's dependency, ships no binary). Install it globally
+# at the same version so client and server speak one protocol.
+sudo npm i -g playwright@1.63.0
+playwright install chromium && sudo playwright install-deps chromium
 cp .env.example .env   # fill in (below)
 ```
 
