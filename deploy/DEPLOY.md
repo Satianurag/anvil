@@ -84,9 +84,9 @@ sudo nginx -t && sudo systemctl reload nginx
 ### 8. Verify
 
 ```bash
-curl -s https://your-domain/health | jq .
+curl -s https://your-domain/healthz | jq .
 ALGORAND_NETWORK=mainnet pnpm smoke          # unpaid prechecks against the live API
-LIVE_BASE_URL=https://your-domain LIVE_PAYER_MNEMONIC=... pnpm live:testnet-style-smoke
+LIVE_BASE_URL=https://your-domain LIVE_PAYER_MNEMONIC=... pnpm live:testnet
 ```
 
 ## B. Reference containers
