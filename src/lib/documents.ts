@@ -1,3 +1,4 @@
+import { Agent, fetch as undiciFetch } from "undici";
 import { z } from "zod";
 import { config } from "../config.ts";
 import { JobInputError } from "./job.ts";
@@ -5,6 +6,10 @@ import { safeFetch } from "./safe-fetch.ts";
 
 export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
 export const MAX_PAGES = 5;
+
+// docling-serve CPU-bound conversions can take several minutes; undici's default
+// 300s headers timeout would abort the request before the job timeout fires.
+const doclingAgent = new Agent({ headersTimeout: 570_000, bodyTimeout: 570_000, connectTimeout: 30_000 });
 
 export const documentSource = z
   .object({
@@ -34,9 +39,10 @@ export async function loadDocument(src: DocumentSource, signal: AbortSignal) {
 
 /** Converts a document (PDF, DOCX, XLSX, PPTX, HTML, image; OCR included) to Markdown with docling-serve. */
 export async function toMarkdown(doc: { base64: string; filename: string }, signal: AbortSignal) {
-  const res = await fetch(new URL("/v1/convert/source", config.DOCLING_URL), {
+  const res = await undiciFetch(new URL("/v1/convert/source", config.DOCLING_URL), {
     method: "POST",
     signal,
+    dispatcher: doclingAgent,
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       sources: [{ kind: "file", base64_string: doc.base64, filename: doc.filename }],

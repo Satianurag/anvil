@@ -97,7 +97,7 @@ export const extract = defineJob({
     evidence: [{ field: "/invoice_number", quote: "Invoice # INV-1042", verified: true }],
     pages_processed: 2,
   },
-  timeoutMs: 180_000,
+  timeoutMs: 480_000,
   async run(input, signal) {
     ajv.compile(input.schema);
     requireEnv("GEMINI_API_KEY");

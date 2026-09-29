@@ -49,6 +49,7 @@
     "marked": "18.0.13",
     "playwright-core": "1.63.0",
     "tsx": "^4.23.15",
+    "undici": "^8.11.2",
     "zod": "4.6.5"
   },
   "devDependencies": {
