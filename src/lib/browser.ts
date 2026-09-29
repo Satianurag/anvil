@@ -24,7 +24,7 @@ async function withPageInner<T>(
   opts: PageOptions,
   fn: (page: Page, context: BrowserContext) => Promise<T>,
 ): Promise<T> {
-  const browser = await chromium.connect(config.BROWSER_WS_URL, { timeout: 15_000 });
+  const browser = await chromium.connect(config.BROWSER_WS_URL, { timeout: 30_000 });
   const onAbort = () => void browser.close();
   opts.signal.addEventListener("abort", onAbort);
   try {

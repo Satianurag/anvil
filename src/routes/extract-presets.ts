@@ -47,7 +47,7 @@ export const extractInvoice = defineJob({
     data: { invoice_number: "INV-1042", total: 1250.5, currency: "USD", line_items: [] },
     checks: { line_items_match_subtotal: true, subtotal_plus_tax_matches_total: true },
   },
-  timeoutMs: 180_000,
+  timeoutMs: 480_000,
   async run(input, signal) {
     requireEnv("GEMINI_API_KEY");
     const markdown = await documentMarkdown(input, signal);
@@ -116,7 +116,7 @@ export const extractBankStatement = defineJob({
     reconciliation: { computed_closing: 1234.56, reconciled: true, difference: 0 },
     totals_by_category: { income: 2500, rent: -1200 },
   },
-  timeoutMs: 180_000,
+  timeoutMs: 480_000,
   async run(input, signal) {
     requireEnv("GEMINI_API_KEY");
     const markdown = await documentMarkdown(input, signal);
@@ -213,7 +213,7 @@ export const extractResumeMatch = defineJob({
     ],
     gaps: ["No Kubernetes experience evidenced"],
   },
-  timeoutMs: 180_000,
+  timeoutMs: 480_000,
   async run(input, signal) {
     requireEnv("GEMINI_API_KEY");
     const markdown = await documentMarkdown(input, signal);
@@ -271,7 +271,7 @@ export const compare = defineJob({
       },
     ],
   },
-  timeoutMs: 240_000,
+  timeoutMs: 480_000,
   async run(input, signal) {
     requireEnv("GEMINI_API_KEY");
     const [a, b] = await Promise.all([documentMarkdown(input.before, signal), documentMarkdown(input.after, signal)]);

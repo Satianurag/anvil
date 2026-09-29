@@ -11,6 +11,9 @@ Restart=always
 RestartSec=5
 # Docling's first inference loads models — keep the timeout generous.
 TimeoutStartSec=300
+# CPU-bound conversions of multi-page documents can exceed the default 120s
+# sync wait; keep it above the app's job timeout.
+Environment=DOCLING_SERVE_MAX_SYNC_WAIT=600
 MemoryMax=700M
 NoNewPrivileges=true
 ProtectSystem=full
